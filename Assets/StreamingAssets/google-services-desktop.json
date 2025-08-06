@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "62561642703",
+    "project_id": "octo-dev-8d5d2",
+    "storage_bucket": "octo-dev-8d5d2.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:62561642703:android:b01c171fb6a094a070efba",
+        "android_client_info": {
+          "package_name": "com.octo.surge"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "62561642703-20auqod7ciddkug5h6ne9rvtnel62ehh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDeMj_ja6rXEB6wrdSoMEZ-DKmaxdaY4i4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "62561642703-20auqod7ciddkug5h6ne9rvtnel62ehh.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
