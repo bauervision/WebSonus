@@ -26,10 +26,20 @@ public class CameraOrbitController : MonoBehaviour
         transform.rotation = Quaternion.Euler(rotation.y, rotation.x, 0f);
     }
 
+    public void SetRotation(float yaw, float pitch = 0f)
+    {
+        rotation.x = yaw;
+        rotation.y = Mathf.Clamp(pitch, minY, maxY);
+        transform.rotation = Quaternion.Euler(rotation.y, rotation.x, 0f);
+
+        // Also clear velocity so it doesn't immediately move
+        velocity = Vector2.zero;
+    }
+
     void HandleInput()
     {
-        if (Input.GetMouseButtonDown(0)) isDragging = true;
-        if (Input.GetMouseButtonUp(0)) isDragging = false;
+        if (Input.GetMouseButtonDown(1)) isDragging = true;
+        if (Input.GetMouseButtonUp(1)) isDragging = false;
 
         if (isDragging)
         {

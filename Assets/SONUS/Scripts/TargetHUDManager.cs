@@ -1,3 +1,5 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using MPUIKIT;
@@ -13,6 +15,8 @@ public class TargetHUDManager : MonoBehaviour
     public RectTransform canvas;
     public GameObject reticlePrefab;
     public GameObject directionIndicatorPrefab;
+    public TMP_Dropdown missionDropdown;
+
 
     private Dictionary<string, GameObject> activeReticles = new();
     private Dictionary<string, GameObject> activeIndicators = new();
@@ -23,6 +27,64 @@ public class TargetHUDManager : MonoBehaviour
     {
         instance = this;
     }
+
+    void Start()
+    {
+        missionDropdown.onValueChanged.AddListener(OnMissionSelected);
+    }
+
+    public void OnMissionSelected(int index)
+    {
+        ClearHUD();
+        switch (index)
+        {
+            case 1:
+                LoadMission_NESW();
+                break;
+            case 2:
+                StartCoroutine(LoadMission_NorthGroupAndSplit());
+                break;
+            default:
+                Debug.LogWarning("Invalid mission selected");
+                break;
+        }
+    }
+
+    void LoadMission_NESW()
+    {
+        Vector2 userGeo = PlayerLocator.instance.GetCurrentLocation();
+        float[] distances = { 100f, 200f, 150f, 50f }; // meters
+
+        CreateTargetFromOffset(userGeo, 0, distances[0], TargetType.STATIONARY);  // North
+        CreateTargetFromOffset(userGeo, 90, distances[1], TargetType.DYNAMIC);    // East
+        CreateTargetFromOffset(userGeo, 180, distances[2], TargetType.STATIONARY); // South
+        CreateTargetFromOffset(userGeo, 270, distances[3], TargetType.DYNAMIC);   // West
+    }
+
+
+    IEnumerator LoadMission_NorthGroupAndSplit()
+    {
+        Vector2 userGeo = PlayerLocator.instance.GetCurrentLocation();
+
+        var stationary = TargetSceneManager.Instance.SpawnTarget(
+            GeoUtils.OffsetLocation(userGeo, 0f, 100f), TargetType.STATIONARY);
+
+        var dynamic = TargetSceneManager.Instance.SpawnTarget(
+            GeoUtils.OffsetLocation(userGeo, 0f, 110f), TargetType.DYNAMIC);
+
+        yield return new WaitForSeconds(5f);
+
+
+        yield return StartCoroutine(MoveTargetByHeading(dynamic, 135f, 300f, 10.5f));
+    }
+
+    TargetActor CreateTargetFromOffset(Vector2 origin, float headingDegrees, float distanceMeters, TargetType type)
+    {
+        Vector2 newGeo = GeoUtils.OffsetLocation(origin, headingDegrees, distanceMeters);
+        return TargetSceneManager.Instance.SpawnTarget(newGeo, type);
+    }
+
+
     public void UpdateTargetUI(TargetActor target)
     {
         if (groupedTargets.Contains(target._ID))
@@ -148,14 +210,8 @@ public class TargetHUDManager : MonoBehaviour
                         effect.GradientType = GradientType.Linear;
                         effect.Rotation = 90f;
 
-                        var colorKeys = new GradientColorKey[] {
-                new GradientColorKey(Color.red, 0f),
-                new GradientColorKey(Color.green, 1f)
-            };
-                        var alphaKeys = new GradientAlphaKey[] {
-                new GradientAlphaKey(1f, 0f),
-                new GradientAlphaKey(1f, 1f)
-            };
+                        var colorKeys = new GradientColorKey[] { new(Color.red, 0f), new(Color.green, 1f) };
+                        var alphaKeys = new GradientAlphaKey[] { new(1f, 0f), new(1f, 1f) };
 
                         effect.Gradient.SetKeys(colorKeys, alphaKeys);
                         mpImage.GradientEffect = effect;
@@ -386,6 +442,140 @@ public class TargetHUDManager : MonoBehaviour
     {
         groupedTargets.Clear();
     }
+
+
+    public void ClearHUD()
+    {
+        foreach (var reticle in activeReticles.Values)
+            Destroy(reticle);
+        foreach (var indicator in activeIndicators.Values)
+            Destroy(indicator);
+
+        activeReticles.Clear();
+        activeIndicators.Clear();
+
+        // Remove all map markers
+        OnlineMapsMarkerManager.instance.RemoveAll();
+        // add the player back
+        PlayerLocator.instance?.RestoreUserMarker();
+
+        TargetSceneManager.Instance.ClearAllTargets();
+    }
+
+
+    public IEnumerator MoveTargetSmoothly(TargetActor actor, Vector2 destination, float duration = 2f)
+    {
+        OnlineMapsMarker marker = actor.GetMarker();
+        if (marker == null)
+        {
+            Debug.LogWarning("No marker found for target.");
+            yield break;
+        }
+
+        Vector2 start = new Vector2((float)actor._Lon, (float)actor._Lat); // (lon, lat)
+        Vector2 end = new Vector2(destination.y, destination.x);           // (lon, lat)
+
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            float t = elapsed / duration;
+            Vector2 current = Vector2.Lerp(start, end, t);
+
+            actor._Lat = current.y;
+            actor._Lon = current.x;
+            marker.position = current;
+
+            // Calculate and apply rotation (only for dynamic targets)
+            if ((TargetType)actor._Type == TargetType.DYNAMIC)
+            {
+                SetMarkerRotationSafe(marker, GetBearing(start, current));
+            }
+
+            if (OnlineMaps.instance != null && OnlineMaps.instance.gameObject.activeInHierarchy)
+                OnlineMaps.instance.Redraw();
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        // Final position and rotation
+        actor._Lat = destination.x;
+        actor._Lon = destination.y;
+        marker.position = new Vector2((float)actor._Lon, (float)actor._Lat);
+
+        if ((TargetType)actor._Type == TargetType.DYNAMIC)
+        {
+            marker.rotationDegree = GetBearing(start, new Vector2((float)actor._Lon, (float)actor._Lat));
+        }
+
+        OnlineMaps.instance.Redraw();
+
+        actor._Alt = OnlineMapsElevationManagerBase.GetUnscaledElevationByCoordinate(actor._Lon, actor._Lat);
+        actor._Time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+    }
+
+
+    public IEnumerator MoveTargetByHeading(TargetActor actor, float headingDegrees, float distanceMeters, float speedMetersPerSecond)
+    {
+        Vector2 startGeo = new Vector2((float)actor._Lat, (float)actor._Lon);
+        Vector2 endGeo = GeoUtils.OffsetLocation(startGeo, headingDegrees, distanceMeters);
+
+        float duration = distanceMeters / speedMetersPerSecond;
+
+        yield return StartCoroutine(MoveTargetSmoothly(actor, endGeo, duration));
+    }
+
+
+    private float GetBearing(Vector2 from, Vector2 to)
+    {
+        float dLon = to.x - from.x;
+        float dLat = to.y - from.y;
+        float angle = Mathf.Atan2(dLon, dLat) * Mathf.Rad2Deg;
+        return (angle + 360f) % 360f; // Normalize to 0–360
+    }
+
+
+
+    public void SyncAllMarkersToTargetPositions()
+    {
+        foreach (var actor in TargetSceneManager.Instance.ActiveTargets)
+        {
+            var marker = actor.GetMarker();
+            if (marker != null)
+            {
+                marker.position = new Vector2((float)actor._Lon, (float)actor._Lat);
+
+                if ((TargetType)actor._Type == TargetType.DYNAMIC)
+                    marker.rotationDegree = GetBearingFromHistoryOrRecentMove(actor);
+            }
+        }
+
+        OnlineMaps.instance?.Redraw();
+    }
+
+    private float GetBearingFromHistoryOrRecentMove(TargetActor actor)
+    {
+        // If you track historical positions, calculate based on last two
+        // Otherwise, just return actor._Dir or fallback
+        return actor._Dir; // or 0f if unknown
+    }
+
+
+    private void SetMarkerRotationSafe(OnlineMapsMarker marker, float rotation)
+    {
+        if (marker == null) return;
+
+        var map = OnlineMaps.instance;
+        if (map == null || map.gameObject == null || !map.gameObject.activeInHierarchy || map.control == null)
+        {
+            // Don't attempt to rotate if the map or control is disabled
+            return;
+        }
+
+        marker.rotationDegree = rotation;
+    }
+
 
 
 }

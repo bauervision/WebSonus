@@ -25,6 +25,9 @@ public class PlayerLocator : MonoBehaviour
 
     private bool mapCentered = false;
 
+    private bool shouldApplySyncedRotation = false;
+
+
     private void Awake()
     {
         instance = this;
@@ -56,6 +59,14 @@ public class PlayerLocator : MonoBehaviour
 
     void Update()
     {
+        // Apply camera rotation once after sync
+        if (shouldApplySyncedRotation)
+        {
+            SceneCam.transform.rotation = Quaternion.Euler(currentRotation.y, currentRotation.x, 0f);
+            shouldApplySyncedRotation = false;
+            return; // Skip rest of update
+        }
+
         // Rotate on right mouse drag
         if (Input.GetMouseButton(1))
         {
@@ -63,17 +74,13 @@ public class PlayerLocator : MonoBehaviour
             currentRotation.y -= Input.GetAxis("Mouse Y") * mouseSensitivity;
             currentRotation.x = Mathf.Repeat(currentRotation.x, 360);
             currentRotation.y = Mathf.Clamp(currentRotation.y, minPitch, maxPitch);
-        }
 
-        // Apply rotation to SceneCam
-        SceneCam.transform.rotation = Quaternion.Euler(currentRotation.y, currentRotation.x, 0f);
-
-        // Set marker rotation based on same X value (clamped)
-        if (userMarker != null)
-        {
-            userMarker.rotationDegree = currentRotation.x;
+            SceneCam.transform.rotation = Quaternion.Euler(currentRotation.y, currentRotation.x, 0f);
+            SetUserMarkerRotation(currentRotation.x);
         }
     }
+
+
 
     private void LateUpdate()
     {
@@ -85,4 +92,77 @@ public class PlayerLocator : MonoBehaviour
             mapCentered = true;
         }
     }
+
+    public Vector2 GetCurrentLocation()
+    {
+        return new Vector2((float)latitude, (float)longitude);
+    }
+
+    public void RestoreUserMarker()
+    {
+        float lastRotation = currentRotation.x;
+
+        if (userMarker != null)
+        {
+            OnlineMapsMarkerManager.RemoveItem(userMarker);
+        }
+
+        userMarker = OnlineMapsMarkerManager.CreateItem(
+            longitude, latitude, userMarkerTexture, "You"
+        );
+        userMarker.align = OnlineMapsAlign.Center;
+        userMarker.scale = 0.66f;
+        userMarker.rotationDegree = lastRotation;
+    }
+
+
+    private void SetUserMarkerRotation(float rotation)
+    {
+        if (userMarker == null ||
+            OnlineMaps.instance == null ||
+            !OnlineMaps.instance.gameObject.activeInHierarchy ||
+            OnlineMaps.instance.control == null)
+        {
+            return;
+        }
+
+        userMarker.rotationDegree = rotation;
+    }
+
+    public void SyncCameraToMarker()
+    {
+        if (userMarker == null || SceneCam == null) return;
+
+        float yaw = NormalizeAngle(userMarker.rotationDegree);
+
+        currentRotation.x = yaw;
+
+        // Sync to camera orbit controller instead
+        var orbit = SceneCam.GetComponent<CameraOrbitController>();
+        if (orbit != null) orbit.SetRotation(yaw);
+
+        shouldApplySyncedRotation = false; // no longer needed
+    }
+
+    public void SyncMarkerToCamera()
+    {
+        if (userMarker == null) return;
+
+        float camYaw = NormalizeAngle(SceneCam.transform.eulerAngles.y);
+        currentRotation.x = camYaw;
+        userMarker.rotationDegree = camYaw;
+
+
+    }
+
+    private float NormalizeAngle(float angle)
+    {
+        angle %= 360f;
+        if (angle > 180f) angle -= 360f;
+        return angle;
+    }
+
+
+
+
 }

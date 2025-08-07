@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -5,11 +6,15 @@ public class UIManager : MonoBehaviour
 {
     public static UIManager instance;
 
+    public GameObject mapCanvas, mapRoot;
+    public GameObject sceneCanvas, sceneModeRoot; // Contains SceneCam + HUD + Compass
+
     public TargetType SelectedTargetType { get; private set; } = TargetType.STATIONARY;
 
     [Header("Target Selection Buttons")]
     public Button stationaryButton;
     public Button dynamicButton;
+
 
     private void Awake()
     {
@@ -42,4 +47,42 @@ public class UIManager : MonoBehaviour
         colors.normalColor = SelectedTargetType == TargetType.DYNAMIC ? selectedColor : normalColor;
         dynamicButton.colors = colors;
     }
+
+    public void EnterSceneMode()
+    {
+        mapCanvas.SetActive(false);
+        mapRoot.SetActive(false);
+        sceneModeRoot.SetActive(true);
+        sceneCanvas.SetActive(true);
+
+        // 3. Wait one frame before syncing rotation
+        StartCoroutine(DelayedSceneCameraSync());
+    }
+
+    private IEnumerator DelayedSceneCameraSync()
+    {
+        yield return null; // wait for Online Maps input to fire
+        yield return new WaitForEndOfFrame(); // wait for Online Maps rotation to apply
+
+        PlayerLocator.instance.SyncCameraToMarker();
+    }
+
+    public void EnterMapMode()
+    {
+        mapCanvas.SetActive(true);
+        mapRoot.SetActive(true);
+        sceneModeRoot.SetActive(false);
+        sceneCanvas.SetActive(false);
+
+        PlayerLocator.instance.RestoreUserMarker();
+        StartCoroutine(DelayedMarkerSyncToSceneCam());
+    }
+
+    private IEnumerator DelayedMarkerSyncToSceneCam()
+    {
+        yield return new WaitForEndOfFrame();
+
+        PlayerLocator.instance.SyncMarkerToCamera();
+    }
+
 }

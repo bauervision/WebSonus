@@ -35,7 +35,7 @@ public static class GeoUtils
 
     public const double Rad2Deg = 180 / Math.PI;
     public const double Deg2Rad = Math.PI / 180;
-    public const double earthRadius = 6371;
+    public const double earthRadius = 6378137.0;
 
 
     /// <summary>
@@ -80,4 +80,29 @@ public static class GeoUtils
         return (float)distanceKm;
     }
 
+
+    public static Vector2 OffsetLocation(Vector2 startLatLon, float headingDegrees, float distanceMeters)
+    {
+        double lat1 = Mathf.Deg2Rad * startLatLon.x;
+        double lon1 = Mathf.Deg2Rad * startLatLon.y;
+        double headingRad = Mathf.Deg2Rad * headingDegrees;
+
+        double angularDistance = distanceMeters / earthRadius;
+
+        double lat2 = Mathf.Asin(
+            Mathf.Sin((float)lat1) * Mathf.Cos((float)angularDistance) +
+            Mathf.Cos((float)lat1) * Mathf.Sin((float)angularDistance) * Mathf.Cos((float)headingRad)
+        );
+
+        double lon2 = lon1 + Mathf.Atan2(
+            Mathf.Sin((float)headingRad) * Mathf.Sin((float)angularDistance) * Mathf.Cos((float)lat1),
+            Mathf.Cos((float)angularDistance) - Mathf.Sin((float)lat1) * Mathf.Sin((float)lat2)
+        );
+
+        // Convert back to degrees
+        float newLat = Mathf.Rad2Deg * (float)lat2;
+        float newLon = Mathf.Rad2Deg * (float)lon2;
+
+        return new Vector2(newLat, newLon);
+    }
 }

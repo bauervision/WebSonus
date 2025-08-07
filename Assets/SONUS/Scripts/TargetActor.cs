@@ -65,6 +65,32 @@ public class TargetActor : SurgeActor
 
     }
 
+    public void MoveTo(Vector2 newLatLon)
+    {
+        _Lat = newLatLon.x;
+        _Lon = newLatLon.y;
+        _Alt = OnlineMapsElevationManagerBase.GetUnscaledElevationByCoordinate(_Lon, _Lat);
+        _Time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+
+        var marker = GetMarker();
+        if (marker != null)
+        {
+            marker.position = new Vector2((float)_Lon, (float)_Lat);
+        }
+    }
+
+    public OnlineMapsMarker GetMarker()
+    {
+        var items = OnlineMapsMarkerManager.instance.items;
+        foreach (var marker in items)
+        {
+            if (marker["data"] is TargetActor actor && actor._ID == this._ID)
+                return marker;
+        }
+        return null;
+    }
+
+
 }
 
 public class TargetSelectorUI : MonoBehaviour
@@ -74,4 +100,7 @@ public class TargetSelectorUI : MonoBehaviour
     public void SelectStationary() => SelectedType = TargetType.STATIONARY;
     public void SelectDynamic() => SelectedType = TargetType.DYNAMIC;
 }
+
+
+
 

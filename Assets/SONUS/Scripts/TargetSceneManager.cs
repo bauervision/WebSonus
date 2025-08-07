@@ -32,4 +32,42 @@ public class TargetSceneManager : MonoBehaviour
     {
         return ActiveTargets.Find(t => t._ID == id);
     }
+
+    public void ClearAllTargets()
+    {
+        ActiveTargets.Clear();
+
+    }
+
+    public TargetActor SpawnTarget(Vector2 latLon, TargetType type)
+    {
+        double lat = latLon.x;
+        double lon = latLon.y;
+
+        float alt = OnlineMapsElevationManagerBase.GetUnscaledElevationByCoordinate(lon, lat);
+
+        TargetActor newTarget = new TargetActor(type, lat, lon)
+        {
+            _ID = System.Guid.NewGuid().ToString(),
+            _Alt = alt
+        };
+
+        // Create marker
+        Texture2D icon = AddTargetOnClick.GetIconForType(type);
+        var marker = OnlineMapsMarkerManager.CreateItem(lon, lat, icon);
+        marker.label = $"Target: {type}";
+        marker.align = OnlineMapsAlign.Center;
+        marker["data"] = newTarget;
+        marker.OnClick += AddTargetOnClick.OnTargetClick;
+        marker.scale = 0.4f;
+
+        //AddTargetOnClick.selectedMarker = marker;
+
+        // Register internally
+        RegisterTarget(newTarget);
+
+        return newTarget;
+    }
+
+
 }

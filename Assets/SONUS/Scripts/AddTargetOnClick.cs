@@ -2,9 +2,12 @@ using UnityEngine;
 using UnityEngine.UI;
 using System;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 
 public class AddTargetOnClick : MonoBehaviour
 {
+    public static AddTargetOnClick instance;
+
     public Texture2D stationaryIcon;
     public Texture2D dynamicIcon;
 
@@ -20,6 +23,7 @@ public class AddTargetOnClick : MonoBehaviour
 
     private void Awake()
     {
+        instance = this;
         // targetTypeText = GameObject.Find("TargetTypeText").GetComponent<Text>();
         // targetUpdateText = GameObject.Find("TargetUpdateText").GetComponent<Text>();
         // targetLatText = GameObject.Find("TargetLatText").GetComponent<Text>();
@@ -64,15 +68,16 @@ public class AddTargetOnClick : MonoBehaviour
     }
 
 
-    private Texture2D GetIconForType(TargetType type)
+    public static Texture2D GetIconForType(TargetType type)
     {
         return type switch
         {
-            TargetType.STATIONARY => (Texture2D)stationaryIcon,
-            TargetType.DYNAMIC => (Texture2D)dynamicIcon,
+            TargetType.STATIONARY => instance.stationaryIcon,
+            TargetType.DYNAMIC => instance.dynamicIcon,
             _ => null,
         };
     }
+
 
     public static void OnTargetClick(OnlineMapsMarkerBase marker)
     {
