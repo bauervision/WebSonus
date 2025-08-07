@@ -33,11 +33,9 @@ namespace Octo.Surge.Sonus
     [System.Serializable]
     public class TargetType
     {
-        public AudioClip _objective;
-        public AudioClip _personnel;
-        public AudioClip _vehicle;
-        public AudioClip _drone;
-        public AudioClip _android;
+        public AudioClip _stationary;
+        public AudioClip _dynamic;
+
 
     }
 
@@ -48,7 +46,7 @@ namespace Octo.Surge.Sonus
         public TargetRange targetRange;
         public TargetType targetType;
         public AudioClip _behindYou, _straightAhead, _directlyBehind;
-        public AudioClip _newObjective, _newPersonnel, _newVehicle, _objective, _personnel, _vehicle;
+        public AudioClip _newStationary, _newDynamic;
         public AudioClip _noTargets;
         public AudioClip _north1;
 
