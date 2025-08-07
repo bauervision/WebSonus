@@ -111,7 +111,7 @@ public class TargetHUDManager : MonoBehaviour
         var target = TargetSceneManager.Instance.GetTargetById(id);
         if (target != null)
         {
-            var mpImage = reticle.GetComponent<MPImage>();
+            var mpImage = reticle.GetComponentInChildren<MPImage>();
             var text = reticle.GetComponentInChildren<TextMeshProUGUI>();
 
             if (groupedCount > 1)
