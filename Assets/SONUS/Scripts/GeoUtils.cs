@@ -105,4 +105,15 @@ public static class GeoUtils
 
         return new Vector2(newLat, newLon);
     }
+
+
+
+    // ✅ Add this function to convert world pos back to lat/lon
+    public static Vector2 WorldToGeo(Vector3 worldPos)
+    {
+        float lon = worldPos.x / 10000f; // Match your GeoToWorld scale
+        float lat = worldPos.z / 10000f;
+        return new Vector2(lat, lon);
+    }
+
 }

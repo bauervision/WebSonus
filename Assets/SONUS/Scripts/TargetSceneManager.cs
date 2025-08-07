@@ -39,7 +39,7 @@ public class TargetSceneManager : MonoBehaviour
 
     }
 
-    public TargetActor SpawnTarget(Vector2 latLon, TargetType type)
+    public TargetActor SpawnTarget(Vector2 latLon, TargetType type, bool skipMarker = false)
     {
         double lat = latLon.x;
         double lon = latLon.y;
@@ -52,22 +52,21 @@ public class TargetSceneManager : MonoBehaviour
             _Alt = alt
         };
 
-        // Create marker
-        Texture2D icon = AddTargetOnClick.GetIconForType(type);
-        var marker = OnlineMapsMarkerManager.CreateItem(lon, lat, icon);
-        marker.label = $"Target: {type}";
-        marker.align = OnlineMapsAlign.Center;
-        marker["data"] = newTarget;
-        marker.OnClick += AddTargetOnClick.OnTargetClick;
-        marker.scale = 0.4f;
+        if (!skipMarker)
+        {
+            Texture2D icon = AddTargetOnClick.GetIconForType(type);
+            var marker = OnlineMapsMarkerManager.CreateItem(lon, lat, icon);
+            marker.label = $"Target: {type}";
+            marker.align = OnlineMapsAlign.Center;
+            marker["data"] = newTarget;
+            marker.OnClick += AddTargetOnClick.OnTargetClick;
+            marker.scale = 0.4f;
+        }
 
-        //AddTargetOnClick.selectedMarker = marker;
-
-        // Register internally
         RegisterTarget(newTarget);
-
         return newTarget;
     }
+
 
 
 }
