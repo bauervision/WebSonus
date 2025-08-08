@@ -16,6 +16,7 @@ public class TargetHUDManager : MonoBehaviour
     public GameObject reticlePrefab;
     public GameObject directionIndicatorPrefab;
     public TMP_Dropdown missionDropdown;
+    public GameObject multiTargetPopup;
 
 
     private Dictionary<string, GameObject> activeReticles = new();
@@ -35,6 +36,7 @@ public class TargetHUDManager : MonoBehaviour
 
     public void OnMissionSelected(int index)
     {
+        multiTargetPopup.SetActive(true);
         ClearHUD();
         switch (index)
         {
@@ -66,23 +68,64 @@ public class TargetHUDManager : MonoBehaviour
     {
         Vector2 userGeo = PlayerLocator.instance.GetCurrentLocation();
 
-        var stationary = TargetSceneManager.Instance.SpawnTarget(
+        TargetActor stationary = TargetSceneManager.Instance.SpawnTarget(
             GeoUtils.OffsetLocation(userGeo, 0f, 100f), TargetType.STATIONARY);
+        stationary._Name = "North Stationary";
 
-        var dynamic = TargetSceneManager.Instance.SpawnTarget(
+        TargetActor dynamic = TargetSceneManager.Instance.SpawnTarget(
             GeoUtils.OffsetLocation(userGeo, 0f, 110f), TargetType.DYNAMIC);
+        dynamic._Name = "North Dynamic";
+
+        // attach to markers + register (you already do this)
+        foreach (var t in new[] { stationary, dynamic })
+        {
+            var marker = t.GetMarker();
+            if (marker != null)
+            {
+                marker["data"] = t;
+                marker["id"] = t._ID;
+                marker.label = $"Target: {t._Name}";
+            }
+            ActiveTargetManager.Instance.Register(t);
+        }
 
         yield return new WaitForSeconds(5f);
-
 
         yield return StartCoroutine(MoveTargetByHeading(dynamic, 135f, 300f, 10.5f));
     }
 
+
     TargetActor CreateTargetFromOffset(Vector2 origin, float headingDegrees, float distanceMeters, TargetType type)
     {
         Vector2 newGeo = GeoUtils.OffsetLocation(origin, headingDegrees, distanceMeters);
-        return TargetSceneManager.Instance.SpawnTarget(newGeo, type);
+        var target = TargetSceneManager.Instance.SpawnTarget(newGeo, type);
+
+        // Name it based on heading
+        target._Name = GetCardinalName(headingDegrees); // "North", "East", etc.
+
+        // Attach to marker + id
+        var marker = target.GetMarker();
+        if (marker != null)
+        {
+            marker["data"] = target;
+            marker["id"] = target._ID;
+            marker.label = $"Target: {target._Name}";
+        }
+
+        ActiveTargetManager.Instance.Register(target);
+        return target;
     }
+
+    private string GetCardinalName(float heading)
+    {
+        // 0=N, 90=E, 180=S, 270=W
+        float h = (heading % 360 + 360) % 360;
+        if (h >= 315 || h < 45) return "North";
+        if (h < 135) return "East";
+        if (h < 225) return "South";
+        return "West";
+    }
+
 
 
     public void UpdateTargetUI(TargetActor target)

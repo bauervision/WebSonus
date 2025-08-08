@@ -15,6 +15,7 @@ public class UIManager : MonoBehaviour
     public Button stationaryButton;
     public Button dynamicButton;
 
+    public bool HasChosenTargetType { get; private set; } = false;
 
     private void Awake()
     {
@@ -25,27 +26,37 @@ public class UIManager : MonoBehaviour
     {
         stationaryButton.onClick.AddListener(() => SetTargetType(TargetType.STATIONARY));
         dynamicButton.onClick.AddListener(() => SetTargetType(TargetType.DYNAMIC));
+
+        // Visually indicate “no selection yet”
+        HighlightSelectedButton();
+
+        ToastManager.Instance.Show($"Welcome to SONUS! Add targets, enter Scene view and track them, or play SONUS Hunt where you can tracking targets only by listening to them!", 10f, true);
     }
 
     public void SetTargetType(TargetType type)
     {
         SelectedTargetType = type;
-        // Optional: highlight selected button
+        HasChosenTargetType = true;
         HighlightSelectedButton();
+
+        ToastManager.Instance.Show($"Active target set!", 1.8f, false);
     }
 
     private void HighlightSelectedButton()
     {
         Color selectedColor = Color.cyan;
-        Color normalColor = Color.white;
+        Color normalColor = new Color(1, 1, 1, 0.6f); // slightly dim to hint not selected
 
-        var colors = stationaryButton.colors;
-        colors.normalColor = SelectedTargetType == TargetType.STATIONARY ? selectedColor : normalColor;
-        stationaryButton.colors = colors;
+        // If nothing chosen yet, both look "normal"
+        bool noneChosen = !HasChosenTargetType;
 
-        colors = dynamicButton.colors;
-        colors.normalColor = SelectedTargetType == TargetType.DYNAMIC ? selectedColor : normalColor;
-        dynamicButton.colors = colors;
+        var sColors = stationaryButton.colors;
+        sColors.normalColor = (!noneChosen && SelectedTargetType == TargetType.STATIONARY) ? selectedColor : normalColor;
+        stationaryButton.colors = sColors;
+
+        var dColors = dynamicButton.colors;
+        dColors.normalColor = (!noneChosen && SelectedTargetType == TargetType.DYNAMIC) ? selectedColor : normalColor;
+        dynamicButton.colors = dColors;
     }
 
     public void EnterSceneMode()

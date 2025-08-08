@@ -12,6 +12,8 @@ public abstract class SurgeActor
     public float _Dir;
     ///<summary> The database key of this data </summary>
     public string _ID;
+    ///<summary> The name of this target </summary>
+    public string _Name;
     ///<summary> Has this actor received recent data updates? </summary>
     public bool _isActive;
     ///<summary> Latitude coordinates of this actor </summary>
@@ -43,7 +45,7 @@ public class TargetActor : SurgeActor
     {
         this._Alt = targetActor._Alt;
         this._Dir = targetActor._Dir;
-
+        this._Name = targetActor._Name;
         this._ID = targetActor._ID;
         this._isActive = targetActor._isActive;
         this._Lat = targetActor._Lat;
@@ -57,6 +59,7 @@ public class TargetActor : SurgeActor
         this._Alt = 0;
         this._Dir = 0;
         this._ID = "+ New Target";
+        this._Name = "";
         this._isActive = true;
         this._Lat = lat;
         this._Lon = lng;

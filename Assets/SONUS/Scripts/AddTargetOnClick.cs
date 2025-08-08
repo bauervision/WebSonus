@@ -37,6 +37,13 @@ public class AddTargetOnClick : MonoBehaviour
 
     private void OnMapClick()
     {
+        // Block until user explicitly chooses a type
+        if (UIManager.instance == null || !UIManager.instance.HasChosenTargetType)
+        {
+            ToastManager.Instance.Show("Choose Stationary or Dynamic Target first.", 2f, false);
+            return;
+        }
+
         OnlineMapsControlBase.instance.GetCoords(out lng, out lat);
         if (lat == 0 || lng == 0) return;
 
@@ -49,7 +56,8 @@ public class AddTargetOnClick : MonoBehaviour
         TargetActor newTarget = new TargetActor(type, lat, lng)
         {
             _ID = Guid.NewGuid().ToString(),
-            _Alt = alt
+            _Alt = alt,
+            _Name = type == TargetType.STATIONARY ? "Stationary Target" : "Dynamic Target"
         };
 
         Texture2D icon = GetIconForType(type);
@@ -58,9 +66,7 @@ public class AddTargetOnClick : MonoBehaviour
         marker.label = $"Target: {type}";
         marker.align = OnlineMapsAlign.Center;
         marker["data"] = newTarget;
-        marker.OnClick += OnTargetClick;
         marker.scale = 0.4f;
-
         selectedMarker = marker;
 
         // Store it for scene view
@@ -79,19 +85,6 @@ public class AddTargetOnClick : MonoBehaviour
     }
 
 
-    public static void OnTargetClick(OnlineMapsMarkerBase marker)
-    {
-        //UIManager.instance.selectedTargetPanel.SetActive(true);
-        currentTarget = marker["data"] as TargetActor;
-
-        if (currentTarget != null)
-        {
-            targetTypeText.text = ((TargetType)currentTarget._Type).ToString();
-            targetUpdateText.text = $"Last Update: {GetTime(currentTarget._Time)}";
-            targetLatText.text = $"Lat: {currentTarget._Lat}";
-            targetLonText.text = $"Lon: {currentTarget._Lon}";
-        }
-    }
 
     public static DateTime GetTime(string timestamp)
     {

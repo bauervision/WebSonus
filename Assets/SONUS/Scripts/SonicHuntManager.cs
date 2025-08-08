@@ -62,6 +62,47 @@ public class SonicHuntManager : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+        ActiveTargetManager.Instance.OnActiveTargetChanged += MaybeStartTracking;
+    }
+
+    private void OnDisable()
+    {
+        if (ActiveTargetManager.Instance != null)
+            ActiveTargetManager.Instance.OnActiveTargetChanged -= MaybeStartTracking;
+    }
+
+    private void MaybeStartTracking(TargetActor _)
+    {
+        if (!gameObject.activeInHierarchy) return; // only if we’re in Scene mode / hunt UI active
+        if (ActiveTargetManager.Instance.HasActiveTarget) StartOrRestartCueTimer();
+    }
+
+    public void OnEnterSceneMode()
+    {
+        gameObject.SetActive(true);
+        if (ActiveTargetManager.Instance.HasActiveTarget) StartOrRestartCueTimer();
+        else ShowToast("Select an active target on the map first.");
+    }
+
+    private void StartOrRestartCueTimer()
+    {
+        StopCueTimerIfRunning();
+        // your existing logic to start timer based on slider freq, etc.
+        // e.g., StartCoroutine(CueLoop());
+    }
+
+    private void StopCueTimerIfRunning()
+    {
+        // your stop logic
+    }
+
+    private void ShowToast(string msg)
+    {
+        // your HUD toast/notification
+    }
+
 
     public void PlayDirectionalClue()
     {

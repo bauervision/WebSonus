@@ -58,8 +58,9 @@ public class TargetSceneManager : MonoBehaviour
             var marker = OnlineMapsMarkerManager.CreateItem(lon, lat, icon);
             marker.label = $"Target: {type}";
             marker.align = OnlineMapsAlign.Center;
-            marker["data"] = newTarget;
-            marker.OnClick += AddTargetOnClick.OnTargetClick;
+            marker["data"] = newTarget;               // full TargetActor ref
+            marker["id"] = newTarget._ID;             // id fallback
+            ActiveTargetManager.Instance.Register(newTarget); // so SetActiveById works
             marker.scale = 0.4f;
         }
 
