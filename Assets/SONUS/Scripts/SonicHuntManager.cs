@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using TMPro;
 using System.Linq;
+using System;
 
 public class SonicHuntManager : MonoBehaviour
 {
@@ -211,7 +212,7 @@ public class SonicHuntManager : MonoBehaviour
         hudController?.SetTargetCount(count);
     }
 
-    public void SetUpdateFrequency(int sliderValue)
+    public void SetUpdateFrequency(float sliderValue)
     {
         frequencySeconds = sliderValue switch
         {

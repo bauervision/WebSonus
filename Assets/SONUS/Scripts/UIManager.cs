@@ -7,7 +7,7 @@ public class UIManager : MonoBehaviour
     public static UIManager instance;
 
     public GameObject mapCanvas, mapRoot;
-    public GameObject sceneCanvas, sceneModeRoot; // Contains SceneCam + HUD + Compass
+    public GameObject sceneCanvas, sceneModeRoot, HUDcanvas, settingsPanel; // Contains SceneCam + HUD + Compass
 
     public TargetType SelectedTargetType { get; private set; } = TargetType.STATIONARY;
 
@@ -15,11 +15,28 @@ public class UIManager : MonoBehaviour
     public Button stationaryButton;
     public Button dynamicButton;
 
+    [Header("Config")]
+    public float frequencySeconds = 30f;
+    [SerializeField] private Slider frequencySlider;
+
+    [Header("Scene Submode (0=AR, 1=Sonic)")]
+    [SerializeField] private int defaultSubmode = 0; // optional: default AR
+    private enum SceneSubmode { AR = 0, SONIC = 1 }
+    private SceneSubmode submode = SceneSubmode.AR;
+    public void SetSonicModeOn() => SetSceneSubmode(1); // OnActive
+    public void SetSonicModeOff() => SetSceneSubmode(0); // OnDeactive
     public bool HasChosenTargetType { get; private set; } = false;
 
     private void Awake()
     {
         instance = this;
+        if (frequencySlider != null)
+        {
+            frequencySlider.minValue = 1;
+            frequencySlider.maxValue = 3;
+            frequencySlider.wholeNumbers = true;               // keep steps 1,2,3
+            frequencySlider.onValueChanged.AddListener(SetUpdateFrequency);
+        }
     }
 
     private void Start()
@@ -31,6 +48,10 @@ public class UIManager : MonoBehaviour
         HighlightSelectedButton();
 
         ToastManager.Instance.Show($"Welcome to SONUS! Add targets, enter Scene view and track them, or play SONUS Hunt where you can tracking targets only by listening to them!", 10f, true);
+
+        // Initialize submode
+        SetSceneSubmode(defaultSubmode);
+
     }
 
     public void SetTargetType(TargetType type)
@@ -59,6 +80,23 @@ public class UIManager : MonoBehaviour
         dynamicButton.colors = dColors;
     }
 
+    public void SetSceneSubmode(int mode) // hook from UI buttons/tabs: AR=0, Sonic=1
+    {
+        submode = (SceneSubmode)Mathf.Clamp(mode, 0, 1);
+        ApplySceneSubmode();
+    }
+
+    private void ApplySceneSubmode()
+    {
+        bool isAR = submode == SceneSubmode.AR;
+
+        // Visual HUD
+        if (HUDcanvas != null) HUDcanvas.SetActive(isAR);
+        TargetHUDManager.instance?.SetVisualsEnabled(isAR);
+
+
+    }
+
     public void EnterSceneMode()
     {
         mapCanvas.SetActive(false);
@@ -66,15 +104,16 @@ public class UIManager : MonoBehaviour
         sceneModeRoot.SetActive(true);
         sceneCanvas.SetActive(true);
 
-        // 3. Wait one frame before syncing rotation
         StartCoroutine(DelayedSceneCameraSync());
+
+        // ensure current submode is applied whenever we enter
+        ApplySceneSubmode();
     }
 
     private IEnumerator DelayedSceneCameraSync()
     {
-        yield return null; // wait for Online Maps input to fire
-        yield return new WaitForEndOfFrame(); // wait for Online Maps rotation to apply
-
+        yield return null;
+        yield return new WaitForEndOfFrame();
         PlayerLocator.instance.SyncCameraToMarker();
     }
 
@@ -85,6 +124,7 @@ public class UIManager : MonoBehaviour
         sceneModeRoot.SetActive(false);
         sceneCanvas.SetActive(false);
 
+
         PlayerLocator.instance.RestoreUserMarker();
         StartCoroutine(DelayedMarkerSyncToSceneCam());
     }
@@ -92,8 +132,31 @@ public class UIManager : MonoBehaviour
     private IEnumerator DelayedMarkerSyncToSceneCam()
     {
         yield return new WaitForEndOfFrame();
-
         PlayerLocator.instance.SyncMarkerToCamera();
     }
+
+    public void ToggleSettingsPanel()
+    {
+        settingsPanel.SetActive(!settingsPanel.activeInHierarchy);
+    }
+
+    public void SetUpdateFrequency(float sliderValue)
+    {
+        frequencySeconds = sliderValue switch
+        {
+            1 => 30f,
+            2 => 60f,
+            3 => 90f,
+            _ => 30f
+        };
+
+        Debug.Log($"[SONIC] Frequency set to {frequencySeconds}s");
+    }
+
+
+
+
+
+
 
 }

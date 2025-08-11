@@ -16,11 +16,7 @@ public class ActiveTargetMarkerHighlighter : MonoBehaviour
 
     private string lastIdApplied;
 
-    void Start()
-    {
-        // Apply immediately on load (covers case where a target is already active)
-        ApplyHighlight(ActiveTargetManager.Instance?.ActiveTarget);
-    }
+
 
     void LateUpdate()
     {

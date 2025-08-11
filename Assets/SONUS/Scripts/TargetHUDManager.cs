@@ -18,9 +18,11 @@ public class TargetHUDManager : MonoBehaviour
     public TMP_Dropdown missionDropdown;
     public GameObject multiTargetPopup;
 
-
+    [SerializeField] private Color activeHighlightColor = Color.cyan;
     private Dictionary<string, GameObject> activeReticles = new();
     private Dictionary<string, GameObject> activeIndicators = new();
+
+    private bool visualsEnabled = true; // default AR on
 
     private HashSet<string> groupedTargets = new();
 
@@ -32,6 +34,43 @@ public class TargetHUDManager : MonoBehaviour
     void Start()
     {
         missionDropdown.onValueChanged.AddListener(OnMissionSelected);
+    }
+
+    public void SetVisualsEnabled(bool enable)
+    {
+        if (visualsEnabled == enable) return;
+        visualsEnabled = enable;
+
+        if (!visualsEnabled)
+        {
+            HideAllVisuals();
+            ClearGroupingCache();
+        }
+        else
+        {
+            ClearGroupingCache();
+            RefreshAll(); // redraw once when returning to AR
+        }
+    }
+    private bool IsActiveTarget(string id)
+    {
+        var a = ActiveTargetManager.Instance?.ActiveTarget;
+        return a != null && a._ID == id;
+    }
+
+    public bool VisualsEnabled => visualsEnabled;
+
+    private void HideAllVisuals()
+    {
+        foreach (var r in activeReticles.Values) r.SetActive(false);
+        foreach (var i in activeIndicators.Values) i.SetActive(false);
+    }
+
+    // call this when AR becomes active to force a redraw
+    public void RefreshAll()
+    {
+        foreach (var t in TargetSceneManager.Instance.ActiveTargets)
+            UpdateTargetUI(t);
     }
 
     public void OnMissionSelected(int index)
@@ -130,15 +169,18 @@ public class TargetHUDManager : MonoBehaviour
 
     public void UpdateTargetUI(TargetActor target)
     {
-        if (groupedTargets.Contains(target._ID))
-            return;
+        if (!visualsEnabled) { HideReticle(target._ID); HideIndicator(target._ID); return; }
+
+        if (groupedTargets.Contains(target._ID)) return;
 
         Vector3 worldPos = GeoUtils.GeoToWorld(new Vector2((float)target._Lat, (float)target._Lon));
         worldPos.y = sceneCamera.transform.position.y;
         Vector3 screenPos = sceneCamera.WorldToViewportPoint(worldPos);
 
         var groupMembers = FindNearbyTargets(target);
-        groupMembers.Add(target); // Always include self
+        groupMembers.Add(target);
+
+        bool isActive = IsActiveTarget(target._ID);
 
         if (groupMembers.Count > 1)
         {
@@ -148,50 +190,34 @@ public class TargetHUDManager : MonoBehaviour
                 .First();
 
             groupedTargets.UnionWith(groupMembers.Select(t => t._ID));
-
             bool isRepresentative = target._ID == closest._ID;
 
             if (isRepresentative)
             {
-                Color groupColor;
-                bool allSameType = groupMembers.All(t => t._Type == groupMembers[0]._Type);
-
-                if (allSameType)
-                    groupColor = groupMembers[0]._Type == (int)TargetType.STATIONARY ? Color.red : Color.green;
-                else
-                    groupColor = Color.white;
-
-                if (screenPos.z > 0f) // Only show reticle if in front of camera
-                    ShowReticle(target._ID, screenPos, worldPos, groupMembers.Count, groupColor);
+                // Cyan if active; otherwise keep original group color logic inside ShowReticle
+                ShowReticle(target._ID, screenPos, worldPos, groupMembers.Count,
+                            isActive ? activeHighlightColor : (Color?)null);
             }
-            else
-            {
-                HideReticle(target._ID);
-            }
+            else HideReticle(target._ID);
 
-            ShowDirectionIndicator(target._ID, worldPos); // Always show regardless of screenPos.z
+            ShowDirectionIndicator(target._ID, worldPos);
             return;
         }
 
-        // 🧠 Non-grouped logic
+        // non-grouped
         Vector3 toTarget = (worldPos - sceneCamera.transform.position).normalized;
-        Vector3 forward = sceneCamera.transform.forward;
-        forward.y = 0;
-        toTarget.y = 0;
+        Vector3 forward = sceneCamera.transform.forward; forward.y = 0; toTarget.y = 0;
         float angleToTarget = Vector3.Angle(forward, toTarget);
         bool isVisible = angleToTarget <= 60f && screenPos.z > 0;
 
         if (isVisible)
-        {
-            ShowReticle(target._ID, screenPos, worldPos);
-        }
+            ShowReticle(target._ID, screenPos, worldPos, 0, isActive ? activeHighlightColor : (Color?)null);
         else
-        {
             HideReticle(target._ID);
-        }
 
-        ShowDirectionIndicator(target._ID, worldPos); // ✅ Always allow full 360° rotation
+        ShowDirectionIndicator(target._ID, worldPos);
     }
+
 
 
 
@@ -203,90 +229,88 @@ public class TargetHUDManager : MonoBehaviour
             reticle = Instantiate(reticlePrefab, canvas);
             activeReticles[id] = reticle;
         }
-
         reticle.SetActive(true);
 
-        Vector2 anchoredPos = new(
-            (viewportPos.x - 0.5f) * canvas.rect.width,
-            (viewportPos.y - 0.5f) * canvas.rect.height
-        );
-
+        Vector2 anchoredPos = new((viewportPos.x - 0.5f) * canvas.rect.width,
+                                  (viewportPos.y - 0.5f) * canvas.rect.height);
         reticle.GetComponent<RectTransform>().anchoredPosition = anchoredPos;
 
         var target = TargetSceneManager.Instance.GetTargetById(id);
-        if (target != null)
+        if (target == null) return;
+
+        var mpImage = reticle.GetComponentInChildren<MPImage>();
+        var text = reticle.GetComponentInChildren<TextMeshProUGUI>();
+
+        bool forceActiveCyan = overrideColor.HasValue || IsActiveTarget(id);
+
+        if (groupedCount > 1)
         {
-            var mpImage = reticle.GetComponentInChildren<MPImage>();
-            var text = reticle.GetComponentInChildren<TextMeshProUGUI>();
-
-            if (groupedCount > 1)
+            if (mpImage != null)
             {
-                if (mpImage != null)
+                mpImage.DrawShape = DrawShape.Circle;
+                var circle = mpImage.Circle; circle.Radius = 50f; mpImage.Circle = circle;
+
+                var effect = mpImage.GradientEffect;
+
+                if (forceActiveCyan)
                 {
-                    mpImage.DrawShape = DrawShape.Circle;
-
-                    var circle = mpImage.Circle;
-                    circle.Radius = 50f;
-                    mpImage.Circle = circle;
-
-                    // Check if this group is all same type
-                    var groupMembers = FindNearbyTargets(target);
-                    groupMembers.Add(target);
+                    effect.Enabled = false;
+                    mpImage.GradientEffect = effect;
+                    mpImage.color = overrideColor ?? activeHighlightColor;
+                }
+                else
+                {
+                    // existing group coloring (all same type → solid, mixed → gradient)
+                    var groupMembers = FindNearbyTargets(target); groupMembers.Add(target);
                     bool allSameType = groupMembers.All(t => t._Type == groupMembers[0]._Type);
-
-                    var effect = mpImage.GradientEffect;
 
                     if (allSameType)
                     {
-                        // Disable gradient, use solid color
-                        effect.Enabled = false;
-                        mpImage.GradientEffect = effect;
-
-                        mpImage.color = groupMembers[0]._Type == (int)TargetType.STATIONARY
-                            ? Color.red
-                            : Color.green;
+                        effect.Enabled = false; mpImage.GradientEffect = effect;
+                        mpImage.color = groupMembers[0]._Type == (int)TargetType.STATIONARY ? Color.red : Color.green;
                     }
                     else
                     {
-                        // Enable gradient
-                        effect.Enabled = true;
-                        effect.GradientType = GradientType.Linear;
-                        effect.Rotation = 90f;
-
-                        var colorKeys = new GradientColorKey[] { new(Color.red, 0f), new(Color.green, 1f) };
-                        var alphaKeys = new GradientAlphaKey[] { new(1f, 0f), new(1f, 1f) };
-
-                        effect.Gradient.SetKeys(colorKeys, alphaKeys);
+                        effect.Enabled = true; effect.GradientType = GradientType.Linear; effect.Rotation = 90f;
+                        effect.Gradient.SetKeys(
+                            new[] { new GradientColorKey(Color.red, 0f), new GradientColorKey(Color.green, 1f) },
+                            new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) }
+                        );
                         mpImage.GradientEffect = effect;
-
-                        // Required for gradient to render correctly
-                        mpImage.color = Color.white;
+                        mpImage.color = Color.white; // required for gradient
                     }
-
-                    mpImage.SetAllDirty();
                 }
-
-                if (text != null)
-                    text.text = $"{groupedCount}";
+                mpImage.SetAllDirty();
             }
-            else
+            if (text != null) text.text = $"{groupedCount}";
+        }
+        else
+        {
+            if (mpImage != null)
             {
-                if (mpImage != null)
+                mpImage.DrawShape = DrawShape.Rectangle;
+                var effect = mpImage.GradientEffect;
+
+                if (forceActiveCyan)
                 {
-                    mpImage.DrawShape = DrawShape.Rectangle;
+                    effect.Enabled = false; mpImage.GradientEffect = effect;
+                    mpImage.color = overrideColor ?? activeHighlightColor;
+                }
+                else
+                {
+                    effect.Enabled = false; mpImage.GradientEffect = effect;
                     mpImage.color = target._Type == (int)TargetType.STATIONARY ? Color.red : Color.green;
                 }
+            }
 
-                if (text != null)
-                {
-                    float distance = Vector3.Distance(sceneCamera.transform.position, worldPos);
-                    text.text = distance < 1000f
-                        ? $"{Mathf.RoundToInt(distance)} m"
-                        : $"{(distance / 1000f):F1} km";
-                }
+            if (text != null)
+            {
+                float distance = Vector3.Distance(sceneCamera.transform.position, worldPos);
+                text.text = distance < 1000f ? $"{Mathf.RoundToInt(distance)} m" : $"{(distance / 1000f):F1} km";
             }
         }
     }
+
 
 
 
@@ -312,19 +336,19 @@ public class TargetHUDManager : MonoBehaviour
 
     private void ShowDirectionIndicator(string id, Vector3 worldPos)
     {
+        if (!visualsEnabled) { HideIndicator(id); return; }
+
         var target = TargetSceneManager.Instance.GetTargetById(id);
         if (target == null) return;
 
-        // --- GROUPING CHECK ---
         var groupMembers = FindNearbyTargets(target);
-        groupMembers.Add(target); // Always include self
+        groupMembers.Add(target);
 
         bool isGrouped = groupMembers.Count > 1;
         bool isRepresentative = true;
 
         if (isGrouped)
         {
-            // Only show for closest
             var closest = groupMembers
                 .OrderBy(t => Vector3.Distance(sceneCamera.transform.position,
                     GeoUtils.GeoToWorld(new Vector2((float)t._Lat, (float)t._Lon))))
@@ -332,125 +356,95 @@ public class TargetHUDManager : MonoBehaviour
 
             groupedTargets.UnionWith(groupMembers.Select(t => t._ID));
             isRepresentative = (target._ID == closest._ID);
-
-            if (!isRepresentative)
-            {
-                HideIndicator(id);
-                return;
-            }
+            if (!isRepresentative) { HideIndicator(id); return; }
         }
 
-        // --- PREP UI ---
         if (!activeIndicators.TryGetValue(id, out GameObject indicatorGO))
         {
             indicatorGO = Instantiate(directionIndicatorPrefab, canvas);
             activeIndicators[id] = indicatorGO;
         }
-
         indicatorGO.SetActive(true);
 
-        // --- ROTATION LOGIC ---
-        Vector3 toTarget = worldPos - sceneCamera.transform.position;
-        toTarget.y = 0;
+        // rotation (unchanged) ...
+        Vector3 toTarget = worldPos - sceneCamera.transform.position; toTarget.y = 0;
         float angleToTarget = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
         float cameraYaw = sceneCamera.transform.eulerAngles.y;
         float relativeAngle = Mathf.DeltaAngle(cameraYaw, angleToTarget);
-
         RectTransform rt = indicatorGO.GetComponent<RectTransform>();
         rt.localEulerAngles = new Vector3(0, 0, -relativeAngle);
 
-        // --- SHAPE & COLOR ---
         var mpImage = indicatorGO.GetComponentInChildren<MPImage>();
         Transform triangle = indicatorGO.transform.Find("Triangle");
 
+        bool isActive = IsActiveTarget(id);
+
         if (mpImage != null)
         {
+            var effect = mpImage.GradientEffect;
+
             if (isGrouped)
             {
                 mpImage.DrawShape = DrawShape.Circle;
 
-                var circle = mpImage.Circle;
-                circle.Radius = 50f;
-                mpImage.Circle = circle;
-
-                // Set fill color to white to show gradient properly
-                mpImage.color = Color.white;
-
-                // Determine group color
-                bool allSameType = groupMembers.All(t => t._Type == groupMembers[0]._Type);
-                var effect = mpImage.GradientEffect;
-
-                if (!allSameType)
+                if (isActive)
                 {
-                    // Red → Green gradient
-                    effect.Enabled = true;
-                    effect.GradientType = GradientType.Linear;
-                    effect.Rotation = 90f;
-
-                    var colorKeys = new GradientColorKey[] {
-                    new GradientColorKey(Color.red, 0f),
-                    new GradientColorKey(Color.green, 1f)
-                };
-                    var alphaKeys = new GradientAlphaKey[] {
-                    new GradientAlphaKey(1f, 0f),
-                    new GradientAlphaKey(1f, 1f)
-                };
-                    effect.Gradient.SetKeys(colorKeys, alphaKeys);
+                    effect.Enabled = false; mpImage.GradientEffect = effect;
+                    mpImage.color = activeHighlightColor;
                 }
                 else
                 {
-                    // Solid red or green
-                    effect.Enabled = false;
-                    mpImage.color = groupMembers[0]._Type == (int)TargetType.STATIONARY ? Color.red : Color.green;
+                    // existing grouped coloring
+                    bool allSameType = groupMembers.All(t => t._Type == groupMembers[0]._Type);
+                    if (!allSameType)
+                    {
+                        effect.Enabled = true; effect.GradientType = GradientType.Linear; effect.Rotation = 90f;
+                        effect.Gradient.SetKeys(
+                            new[] { new GradientColorKey(Color.red, 0f), new GradientColorKey(Color.green, 1f) },
+                            new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) }
+                        );
+                        mpImage.GradientEffect = effect;
+                        mpImage.color = Color.white;
+                    }
+                    else
+                    {
+                        effect.Enabled = false; mpImage.GradientEffect = effect;
+                        mpImage.color = groupMembers[0]._Type == (int)TargetType.STATIONARY ? Color.red : Color.green;
+                    }
                 }
-
-                mpImage.GradientEffect = effect;
-
             }
             else
             {
                 mpImage.DrawShape = DrawShape.Triangle;
-                mpImage.color = target._Type == (int)TargetType.STATIONARY ? Color.red : Color.green;
 
-                // Disable any lingering gradient
-                var effect = mpImage.GradientEffect;
-                effect.Enabled = false;
-                mpImage.GradientEffect = effect;
-
-
+                effect.Enabled = false; mpImage.GradientEffect = effect;
+                mpImage.color = isActive
+                    ? activeHighlightColor
+                    : (target._Type == (int)TargetType.STATIONARY ? Color.red : Color.green);
             }
 
-            // --- FADE ALPHA ---
+            // fade alpha by angle (keep behavior)
             float absAngle = Mathf.Abs(relativeAngle);
             float fadeThreshold = 50f;
-            float alpha = Mathf.Clamp01(absAngle / fadeThreshold);
-
-            Color current = mpImage.color;
-            current.a = alpha;
-            mpImage.color = current;
+            var c = mpImage.color;
+            c.a = Mathf.Clamp01(absAngle / fadeThreshold);
+            mpImage.color = c;
         }
 
-        // --- SIZE THROB FOR TRIANGLE ---
+        // triangle scale throb unchanged...
         if (triangle != null && !isGrouped)
         {
             float distance = Vector3.Distance(sceneCamera.transform.position, worldPos);
-            float scale = 0.2f;
-
-            if (distance < 100f) scale = 0.7f;
-            else if (distance < 500f) scale = 0.5f;
-            else if (distance < 1000f) scale = 0.3f;
-
+            float scale = (distance < 100f) ? 0.7f : (distance < 500f ? 0.5f : (distance < 1000f ? 0.3f : 0.2f));
             if (distance < 100f)
             {
                 float pulse = Mathf.Sin(Time.time * 5f) * 0.1f + 1.0f;
                 triangle.localScale = pulse * scale * Vector3.one;
             }
-            else
-            {
-                triangle.localScale = Vector3.one * scale;
-            }
+            else triangle.localScale = Vector3.one * scale;
         }
     }
+
 
 
 
