@@ -27,6 +27,9 @@ public class UIManager : MonoBehaviour
     public void SetSonicModeOff() => SetSceneSubmode(0); // OnDeactive
     public bool HasChosenTargetType { get; private set; } = false;
 
+
+
+
     private void Awake()
     {
         instance = this;
@@ -94,6 +97,15 @@ public class UIManager : MonoBehaviour
         if (HUDcanvas != null) HUDcanvas.SetActive(isAR);
         TargetHUDManager.instance?.SetVisualsEnabled(isAR);
 
+        if (isAR)
+        {
+            AudioManager.Instance?.StopSonic();
+        }
+        else
+        {
+            AudioManager.Instance?.StartSonic(frequencySeconds);
+        }
+
 
     }
 
@@ -150,10 +162,15 @@ public class UIManager : MonoBehaviour
             _ => 30f
         };
 
-        Debug.Log($"[SONIC] Frequency set to {frequencySeconds}s");
+        AudioManager.Instance?.ApplyFrequency(frequencySeconds);
     }
 
 
+
+    public void HearNow() // hook this to your button
+    {
+        AudioManager.Instance?.PlayForActiveTargetNow();
+    }
 
 
 

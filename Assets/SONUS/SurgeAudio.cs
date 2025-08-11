@@ -39,12 +39,20 @@ namespace Octo.Surge.Sonus
 
     }
 
+    [System.Serializable]
+    public class TargetMoving
+    {
+        public AudioClip __north, _northEast, _east, _southEast, _south, _southWest, _west, _northWest;
+
+    }
+
 
     [System.Serializable]
     public class SONUS
     {
         public TargetRange targetRange;
         public TargetType targetType;
+        public TargetMoving targetMoving;
         public AudioClip _behindYou, _straightAhead, _directlyBehind;
         public AudioClip _newStationary, _newDynamic;
         public AudioClip _noTargets;
