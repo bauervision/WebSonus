@@ -651,62 +651,63 @@ public class TargetHUDManager : MonoBehaviour
 
     public IEnumerator MoveTargetSmoothly(TargetActor actor, Vector2 destination, float duration = 2f)
     {
+        // Marker is optional. We'll update it if usable, but never stop the route because of it.
         OnlineMapsMarker marker = actor.GetMarker();
-        if (marker == null)
-        {
-            Debug.LogWarning("No marker found for target.");
-            yield break;
-        }
 
-        // Capture mission version to auto-cancel on ClearHUD / reload
         int myVersion = _missionVersion;
 
         Vector2 start = new Vector2((float)actor._Lon, (float)actor._Lat); // (lon, lat)
-        Vector2 end = new Vector2(destination.y, destination.x);         // (lon, lat)
+        Vector2 end = new Vector2(destination.y, destination.x);           // (lon, lat)
 
         float elapsed = 0f;
 
         while (elapsed < duration)
         {
-            // Cancel if mission changed or marker/map became invalid
-            if (myVersion != _missionVersion || !IsMarkerUsable(marker)) yield break;
+            if (myVersion != _missionVersion) yield break;
 
-            float t = elapsed / duration;
+            float t = Mathf.Clamp01(elapsed / duration);
             Vector2 current = Vector2.Lerp(start, end, t);
 
+            // Always update the actor position (core simulation)
             actor._Lat = current.y;
             actor._Lon = current.x;
 
-            if (!SafeSetMarkerPosition(marker, current)) yield break;
-
-            // Calculate and apply rotation (only for dynamic targets)
-            if ((TargetType)actor._Type == TargetType.DYNAMIC)
+            // Update marker only if usable (no-op otherwise)
+            if (IsMarkerUsable(marker))
             {
-                SetMarkerRotationSafe(marker, GetBearing(start, current));
-            }
+                marker.position = current;
 
-            var map = OnlineMaps.instance;
-            if (map != null && map.gameObject.activeInHierarchy) map.Redraw();
+                if ((TargetType)actor._Type == TargetType.DYNAMIC)
+                {
+                    SetMarkerRotationSafe(marker, GetBearing(start, current));
+                }
+
+                var map = OnlineMaps.instance;
+                if (map != null && map.gameObject.activeInHierarchy) map.Redraw();
+            }
 
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        // Final position and rotation (with the same guards)
-        if (myVersion != _missionVersion || !IsMarkerUsable(marker)) yield break;
+        // Final position
+        if (myVersion != _missionVersion) yield break;
 
         actor._Lat = destination.x;
         actor._Lon = destination.y;
 
-        if (!SafeSetMarkerPosition(marker, new Vector2((float)actor._Lon, (float)actor._Lat))) yield break;
-
-        if ((TargetType)actor._Type == TargetType.DYNAMIC)
+        if (IsMarkerUsable(marker))
         {
-            SetMarkerRotationSafe(marker, GetBearing(start, new Vector2((float)actor._Lon, (float)actor._Lat)));
-        }
+            marker.position = new Vector2((float)actor._Lon, (float)actor._Lat);
 
-        var mapFinal = OnlineMaps.instance;
-        if (mapFinal != null && mapFinal.gameObject.activeInHierarchy) mapFinal.Redraw();
+            if ((TargetType)actor._Type == TargetType.DYNAMIC)
+            {
+                SetMarkerRotationSafe(marker, GetBearing(start, new Vector2((float)actor._Lon, (float)actor._Lat)));
+            }
+
+            var mapFinal = OnlineMaps.instance;
+            if (mapFinal != null && mapFinal.gameObject.activeInHierarchy) mapFinal.Redraw();
+        }
 
         actor._Alt = OnlineMapsElevationManagerBase.GetUnscaledElevationByCoordinate(actor._Lon, actor._Lat);
         actor._Time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
@@ -799,10 +800,14 @@ public class TargetHUDManager : MonoBehaviour
 
     private bool SafeSetMarkerPosition(OnlineMapsMarker marker, Vector2 pos)
     {
-        if (!IsMarkerUsable(marker)) return false;
-        marker.position = pos;
+        if (IsMarkerUsable(marker))
+        {
+            marker.position = pos;
+        }
+        // If not usable, silently no-op but still "succeed" so movement continues.
         return true;
     }
+
 
 
 

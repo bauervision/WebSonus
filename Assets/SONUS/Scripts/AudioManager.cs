@@ -23,18 +23,38 @@ public class AudioManager : MonoBehaviour
 
     // === NEW: Movement-cue tuning (anti-annoyance) ===
     [Header("Movement Cue Rules")]
+    [SerializeField] private bool debugMovementCues = true;
     [SerializeField] private bool movementCuesEnabled = true;
-    [SerializeField] private float lockCorridorDeg = 15f;       // user “on course” cone
-    [SerializeField] private float offCourseDeg = 25f;          // fire if beyond this
-    [SerializeField] private float lockAcquireTime = 2f;        // must be on-course this long
-    [SerializeField] private float offCoursePersistTime = 1f;   // must stay off-course this long
-    [SerializeField] private float minMoveSpeed = 0.5f;         // m/s
-    [SerializeField] private float minMoveDistance = 5f;        // meters
-    [SerializeField] private float movementCueCooldown = 12f;   // seconds
-    [SerializeField] private float ignoreIfCloserThan = 15f;    // meters
+    [SerializeField] private float lockCorridorDeg = 20f;       // user “on course” cone
+
+
+    [SerializeField] private float minMoveSpeed = 0.3f;         // m/s
+
+    [SerializeField] private float movementCueCooldown = 6f;   // seconds
+    [SerializeField] private float ignoreIfCloserThan = 10f;    // meters
+
+    [SerializeField] private float straightAheadMovementGrace = 0.5f; // allow movement cue shortly after SA
+    private float _lastStraightAheadPlayTime = -999f;
+
+
+
+    // --- Add with the other Movement-cue tuning fields ---
+    // Anti-spam & hysteresis for straight-ahead
+    [SerializeField] private float straightAheadDeg = 24f;        // instant fire threshold
+    [SerializeField] private float straightAheadCooldown = 3f;    // min gap between straight-ahead calls
+    [SerializeField] private float straightAheadRearmSeconds = 0.75f; // how long out of corridor before re-arming
+    [SerializeField] private float straightAheadRearmExtraDeg = 6f;   // must exceed corridor by this extra angle to re-arm
+    [SerializeField] private float recentLockGrace = 4f;     // seconds after being aligned we still consider "recently locked"
+
+    private float _lastStraightAheadTime = -999f;
+    private float _lastLockTime = -999f;
+    private bool _wasLockedLastTick = false;
+    // Re-arm bookkeeping
+    private bool _straightAheadArmed = true;
+    private float _leftCorridorAt = -999f;
 
     // movement state
-    private float _lockTimer, _offTimer, _lastMoveCueTime = -999f;
+    private float _lockTimer, _lastMoveCueTime = -999f;
     private Vector3 _lastTargetWorld;
     private double _lastSampleTime;
     private bool _haveLastSample;
@@ -72,6 +92,10 @@ public class AudioManager : MonoBehaviour
         if (_movementLoop != null) StopCoroutine(_movementLoop);
         _periodicLoop = _movementLoop = null;
         ResetMovementState();
+        _wasLockedLastTick = false;
+        _lastLockTime = -999f;
+        _straightAheadArmed = true;
+        _leftCorridorAt = -999f;
     }
 
     public void ApplyFrequency(float seconds)
@@ -111,28 +135,77 @@ public class AudioManager : MonoBehaviour
             var active = ActiveTargetManager.Instance?.ActiveTarget;
             if (active == null) { ResetMovementState(); continue; }
 
+            // Positions
             Vector3 player = sceneCamera.transform.position;
             Vector3 target = GeoUtils.GeoToWorld(new Vector2((float)active._Lat, (float)active._Lon));
             target.y = player.y;
 
+            // Too close? (skip cues)
             float distance = Vector3.Distance(player, target);
-            if (distance < ignoreIfCloserThan) { ResetMovementState(false); continue; }
+            if (distance < ignoreIfCloserThan)
+            {
+                ResetMovementState(false);
+                if (debugMovementCues) Debug.Log("[MC] Too close; ignoring.");
+                continue;
+            }
 
-            // User heading vs target bearing (for on-course lock)
+            // Camera vs target bearing (alignment)
             Vector3 fwd = sceneCamera.transform.forward; fwd.y = 0f;
             Vector3 toT = target - player; toT.y = 0f;
-            if (toT.sqrMagnitude < 1e-4f) { ResetMovementState(false); continue; }
+            if (toT.sqrMagnitude < 1e-4f)
+            {
+                ResetMovementState(false);
+                if (debugMovementCues) Debug.Log("[MC] toT ~ 0");
+                continue;
+            }
 
-            float camYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+            float camYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg; // 0°=N, 90°=E
             float tarYaw = Mathf.Atan2(toT.x, toT.z) * Mathf.Rad2Deg;
-            float relAngle = Mathf.DeltaAngle(camYaw, tarYaw); // -180..+180
+            float relAngle = Mathf.DeltaAngle(camYaw, tarYaw);          // -180..+180
+            float absRel = Mathf.Abs(relAngle);
+            float now = Time.time;
 
-            // lock-on timer
-            if (Mathf.Abs(relAngle) <= lockCorridorDeg) _lockTimer += sampleInterval;
-            else _lockTimer = 0f;
+            // Corridor membership
+            bool inCorridor = absRel <= lockCorridorDeg;
+            if (inCorridor)
+            {
+                _lockTimer += sampleInterval;
+                _lastLockTime = now;
+                _leftCorridorAt = -999f;
 
-            // Movement sample of target
-            double now = Time.realtimeSinceStartupAsDouble;
+                // Instant "Straight Ahead" (anti-spam + re-arm)
+                if (_straightAheadArmed && absRel <= straightAheadDeg && (now - _lastStraightAheadTime) >= straightAheadCooldown)
+                {
+                    if (sonus != null && sonus._straightAhead != null)
+                    {
+                        PositionAudioHeading(player, target);
+                        PlaySingle(sonus._straightAhead);
+                        _lastStraightAheadTime = now;
+                        _lastStraightAheadPlayTime = now; // track SA time ONLY
+                        _straightAheadArmed = false;
+                        BumpInterval();
+                        if (debugMovementCues) Debug.Log($"[MC] StraightAhead PLAY (absRel={absRel:F1}°)");
+                    }
+                }
+            }
+            else
+            {
+                _lockTimer = 0f;
+
+                // Start/track time since we left the corridor
+                if (_leftCorridorAt < 0f) _leftCorridorAt = now;
+
+                // Re-arm straight-ahead ONLY after time and angle thresholds
+                bool rearmTime = (now - _leftCorridorAt) >= straightAheadRearmSeconds;
+                bool rearmAngle = absRel >= (lockCorridorDeg + straightAheadRearmExtraDeg);
+                if (rearmTime && rearmAngle) _straightAheadArmed = true;
+            }
+
+            // Detect corridor exit edge (for immediate movement cue)
+            bool justExitedCorridor = _wasLockedLastTick && !inCorridor;
+            _wasLockedLastTick = inCorridor;
+
+            // --- Movement sampling (compute delta BEFORE updating cache) ---
             if (!_haveLastSample)
             {
                 _lastTargetWorld = target;
@@ -141,44 +214,84 @@ public class AudioManager : MonoBehaviour
                 continue;
             }
 
-            float dt = (float)(now - _lastSampleTime);
-            float disp = Vector3.Distance(_lastTargetWorld, target);
-            float speed = (dt > 0f) ? disp / dt : 0f;
+            float dt = now - (float)_lastSampleTime;
+            if (dt <= 0f)
+            {
+                if (debugMovementCues) Debug.Log("[MC] dt<=0");
+                continue;
+            }
 
-            // update sample for next tick
+            Vector3 delta = target - _lastTargetWorld; delta.y = 0f;
+            float disp = delta.magnitude;
+            float speed = disp / dt;
+
+            // Update cache AFTER measuring
             _lastTargetWorld = target;
             _lastSampleTime = now;
 
-            if (speed < minMoveSpeed || disp < minMoveDistance) { _offTimer = 0f; continue; }
-
-            bool offCourse = Mathf.Abs(relAngle) >= offCourseDeg && _lockTimer >= lockAcquireTime;
-            if (offCourse) _offTimer += sampleInterval; else _offTimer = 0f;
-
-            if (_offTimer >= offCoursePersistTime && (now - _lastMoveCueTime) >= movementCueCooldown)
+            // Speed-only gate (distance per sample is tiny at 5 Hz)
+            if (speed < minMoveSpeed)
             {
-                // Direction of target movement (world bearing), not relative angle
-                Vector3 moveDir = toT.normalized; // current toT
-                // better: use actual movement vector
-                moveDir = (target - _lastTargetWorld); moveDir.y = 0f;
-                if (moveDir.sqrMagnitude > 1e-4f)
+
+                if (debugMovementCues) Debug.Log($"[MC] Too slow: {speed:F2} < {minMoveSpeed:F2}");
+                continue;
+            }
+
+            // Movement cue on EXIT (if we were recently aligned)
+            bool recentlyLocked = (now - _lastLockTime) <= recentLockGrace;
+
+            bool canPlayMovement = (now - _lastMoveCueTime) >= movementCueCooldown || (now - _lastStraightAheadPlayTime) >= straightAheadMovementGrace;
+
+            if (justExitedCorridor && recentlyLocked && canPlayMovement)
+            {
+                if (delta.sqrMagnitude > 1e-4f)
                 {
-                    float moveYaw = Mathf.Atan2(moveDir.x, moveDir.z) * Mathf.Rad2Deg;
-                    var d8 = BearingToDir8(moveYaw);
+                    float moveYaw = Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg; // 0°=N, CW
+                    var d8 = BearingToDir8((moveYaw + 360f) % 360f);
                     PlayTargetMoving(d8, player, target);
-                    _lastMoveCueTime = (float)now;
+                    _lastMoveCueTime = now;
+                    BumpInterval();
+                    if (debugMovementCues) Debug.Log($"[MC] Moving cue on EXIT: {d8} (absRel={absRel:F1}°)");
                 }
 
-                _offTimer = 0f;   // require another off-course persistence
-                _lockTimer = 0f;  // require re-lock before next correction cue
+            }
+            else
+            {
+                // (Optional backup: persistence-based off-course cue)
+                // bool offCourse = (absRel >= offCourseDeg) && recentlyLocked;
+                // if (offCourse) _offTimer += sampleInterval; else _offTimer = 0f;
+                // if (_offTimer >= offCoursePersistTime && (now - _lastMoveCueTime) >= movementCueCooldown)
+                // {
+                //     if (delta.sqrMagnitude > 1e-4f)
+                //     {
+                //         float moveYaw = Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg;
+                //         var d8 = BearingToDir8((moveYaw + 360f) % 360f);
+                //         PlayTargetMoving(d8, player, target);
+                //         _lastMoveCueTime = now;
+                //         if (debugMovementCues) Debug.Log($"[MC] Moving cue PERSIST: {d8}");
+                //     }
+                //     _offTimer = 0f;
+                // }
+            }
+
+            if (debugMovementCues)
+            {
+                Debug.Log($"[MC] rel={absRel:F1}°, speed={speed:F2}, lock={_lockTimer:F2}, armed={_straightAheadArmed}, " +
+                          $"recent={recentlyLocked}, exited={justExitedCorridor}, cool={(now - _lastMoveCueTime):F1}");
             }
         }
     }
 
+
+
     private void ResetMovementState(bool clearLock = true)
     {
         if (clearLock) _lockTimer = 0f;
-        _offTimer = 0f;
+
         _haveLastSample = false;
+        _wasLockedLastTick = false;
+        _straightAheadArmed = true;
+        _leftCorridorAt = -999f;
     }
 
     // === Existing methods below (plus a tiny helper) ===
@@ -241,6 +354,7 @@ public class AudioManager : MonoBehaviour
         AudioClip distClip = PickDistanceClip(distance);
 
         PlaySequence(dirClip, distClip);
+        AudioCueSlider.instance.ResetTimer();
     }
 
     public void PlayNewTargetClip(TargetActor actor)
@@ -276,6 +390,7 @@ public class AudioManager : MonoBehaviour
             voiceSource.Stop();
             voiceSource.clip = c;
             voiceSource.Play();
+            BumpInterval();
             yield return new WaitForSeconds(c.length);
         }
         _playRoutine = null;
@@ -340,4 +455,18 @@ public class AudioManager : MonoBehaviour
 
         return r._400m ?? r._300m ?? r._200m ?? r._100m;
     }
+
+    private void BumpInterval()
+    {
+        // reset the visible HUD countdown
+        AudioCueSlider.instance?.ResetTimer();
+
+        // restart the periodic loop so its internal timer resets too
+        if (_periodicLoop != null)
+        {
+            StopCoroutine(_periodicLoop);
+            _periodicLoop = StartCoroutine(PeriodicCueLoop());
+        }
+    }
+
 }

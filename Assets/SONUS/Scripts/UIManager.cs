@@ -1,4 +1,5 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -8,7 +9,7 @@ public class UIManager : MonoBehaviour
 
     public GameObject mapCanvas, mapRoot;
     public GameObject sceneCanvas, sceneModeRoot, HUDcanvas, settingsPanel; // Contains SceneCam + HUD + Compass
-
+    public TextMeshProUGUI frequencyText;
     public TargetType SelectedTargetType { get; private set; } = TargetType.STATIONARY;
 
     [Header("Target Selection Buttons")]
@@ -16,7 +17,7 @@ public class UIManager : MonoBehaviour
     public Button dynamicButton;
 
     [Header("Config")]
-    public float frequencySeconds = 30f;
+    public float frequencySeconds = 10f;
     [SerializeField] private Slider frequencySlider;
 
     [Header("Scene Submode (0=AR, 1=Sonic)")]
@@ -50,7 +51,7 @@ public class UIManager : MonoBehaviour
         // Visually indicate “no selection yet”
         HighlightSelectedButton();
 
-        ToastManager.Instance.Show($"Welcome to SONUS! Add targets, enter Scene view and track them, or play SONUS Hunt where you can tracking targets only by listening to them!", 10f, true);
+        // ToastManager.Instance.Show($"Welcome to Sonus, this is our demo web application. A mixture of Augmented Reality and Sonic Targeting, Sonus is built to allow hands free, and headset free target tracking.", 10f, true);
 
         // Initialize submode
         SetSceneSubmode(defaultSubmode);
@@ -63,7 +64,7 @@ public class UIManager : MonoBehaviour
         HasChosenTargetType = true;
         HighlightSelectedButton();
 
-        ToastManager.Instance.Show($"Active target set!", 1.8f, false);
+
     }
 
     private void HighlightSelectedButton()
@@ -156,20 +157,22 @@ public class UIManager : MonoBehaviour
     {
         frequencySeconds = sliderValue switch
         {
-            1 => 30f,
-            2 => 60f,
-            3 => 90f,
+            1 => 10f,
+            2 => 20f,
+            3 => 30f,
             _ => 30f
         };
 
+        frequencyText.text = frequencySeconds.ToString() + " seconds";
         AudioManager.Instance?.ApplyFrequency(frequencySeconds);
+        AudioCueSlider.instance.SetInterval(frequencySeconds);
     }
 
 
 
     public void HearNow() // hook this to your button
     {
-        AudioManager.Instance?.PlayForActiveTargetNow();
+        AudioManager.Instance.PlayForActiveTargetNow();
     }
 
 

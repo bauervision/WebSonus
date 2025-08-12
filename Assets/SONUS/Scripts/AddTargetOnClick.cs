@@ -40,7 +40,13 @@ public class AddTargetOnClick : MonoBehaviour
         // Block until user explicitly chooses a type
         if (UIManager.instance == null || !UIManager.instance.HasChosenTargetType)
         {
-            ToastManager.Instance.Show("Choose Stationary or Dynamic Target first.", 2f, false);
+            GuideManager.Instance.ShowOneShot(
+                "Choose a target type first.",
+                anchoredPosition: new Vector2(-333f, 69f),  // center of the canvas; use any X/Y you like
+                arrow: ArrowDir.Left,
+                dimBackground: true
+            );
+
             return;
         }
 
