@@ -7,7 +7,7 @@ public class UIManager : MonoBehaviour
 {
     public static UIManager instance;
 
-    public GameObject mapCanvas, mapRoot;
+    public GameObject mapCanvas, mapRoot, map3d;
     public GameObject sceneCanvas, sceneModeRoot, HUDcanvas, settingsPanel; // Contains SceneCam + HUD + Compass
     public TextMeshProUGUI frequencyText;
     public TargetType SelectedTargetType { get; private set; } = TargetType.STATIONARY;
@@ -116,7 +116,7 @@ public class UIManager : MonoBehaviour
         mapRoot.SetActive(false);
         sceneModeRoot.SetActive(true);
         sceneCanvas.SetActive(true);
-
+        map3d.SetActive(true);
         StartCoroutine(DelayedSceneCameraSync());
 
         // ensure current submode is applied whenever we enter
@@ -125,9 +125,26 @@ public class UIManager : MonoBehaviour
 
     private IEnumerator DelayedSceneCameraSync()
     {
+        var cam = PlayerLocator.instance.SceneCam;
+        var fps = cam ? cam.GetComponent<FPSController>() : null;
+        if (fps) fps.enabled = false;
+
         yield return null;
         yield return new WaitForEndOfFrame();
         PlayerLocator.instance.SyncCameraToMarker();
+        PlayerLocator.instance.CenterMapAndPlaceCamera(); // new helper below
+                                                          // wait briefly until there's ground, then snap once
+        float t = 0f;
+        while (t < 1.0f && !PlayerLocator.instance.HasGroundUnderCamera(200f))
+        {
+            t += Time.deltaTime;
+            yield return null;
+        }
+        PlayerLocator.instance.SnapCameraToGroundOnce();
+
+
+
+        if (fps) fps.enabled = true;
     }
 
     public void EnterMapMode()
@@ -136,7 +153,7 @@ public class UIManager : MonoBehaviour
         mapRoot.SetActive(true);
         sceneModeRoot.SetActive(false);
         sceneCanvas.SetActive(false);
-
+        map3d.SetActive(false);
 
         PlayerLocator.instance.RestoreUserMarker();
         StartCoroutine(DelayedMarkerSyncToSceneCam());

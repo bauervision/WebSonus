@@ -3,13 +3,22 @@ using UnityEngine;
 public class PlayerLocator : MonoBehaviour
 {
     public static PlayerLocator instance { get; private set; }
+
+
+
+    [Header("3D Tileset")]
+    public OnlineMaps map;
+    public OnlineMaps map3d;
+    public OnlineMapsTileSetControl tileset3D;
+    public float cameraEyeHeight = 1.7f; // eye level above terrain
+
     [Header("Scene References")]
-    public Camera SceneCam;
+    public GameObject SceneCam;
     public Texture2D userMarkerTexture;
 
     [Header("User Starting Position")]
-    public double latitude = 43.83194;
-    public double longitude = 11.3136;
+    public double latitude = 37.306050;
+    public double longitude = 80.611921;
 
     [Header("Mouse Look Settings")]
     public float mouseSensitivity = 3f;
@@ -17,7 +26,7 @@ public class PlayerLocator : MonoBehaviour
     public float minPitch = -80f;
     public float maxPitch = 80f;
 
-    private OnlineMaps map;
+
     private OnlineMapsMarker userMarker;
 
     private Vector2 targetRotation;
@@ -27,14 +36,31 @@ public class PlayerLocator : MonoBehaviour
 
     private bool shouldApplySyncedRotation = false;
 
-
+    int zoom3dLevel = 19;
     private void Awake()
     {
         instance = this;
     }
     private void Start()
     {
-        map = OnlineMaps.instance;
+
+
+        // Place the camera at the world position of our start (lon, lat) on the 3D tileset
+        if (tileset3D != null && SceneCam != null)
+        {
+
+            Vector3 world = tileset3D.GetWorldPositionWithElevation(longitude, latitude);
+            world.y += cameraEyeHeight; // keep your eye height lift
+            SceneCam.transform.position = world;
+
+            // Initialize our rotation cache from the camera (FPSController will now drive look)
+            currentRotation.x = NormalizeAngle(SceneCam.transform.eulerAngles.y);
+            currentRotation.y = Mathf.Clamp(NormalizeAngle(SceneCam.transform.eulerAngles.x), minPitch, maxPitch);
+        }
+        else
+        {
+            Debug.LogWarning("PlayerLocator: tileset or SceneCam missing; cannot place camera at start.");
+        }
 
         // Create user marker (lon, lat)
         userMarker = OnlineMapsMarkerManager.CreateItem(
@@ -50,9 +76,13 @@ public class PlayerLocator : MonoBehaviour
         smoothedRotation = targetRotation;
 
         // Set map position now, and again in LateUpdate (to ensure full center)
-        map.position = new Vector2((float)longitude, (float)latitude);
-        map.zoom = 17;
+        map.SetPositionAndZoom(longitude, latitude, 17);
         map.Redraw();
+        map3d.SetPositionAndZoom(longitude, latitude, zoom3dLevel);
+        map3d.Redraw();
+
+        // hide terrain now that it is set
+        //map3d.gameObject.SetActive(false);
     }
 
     private Vector2 currentRotation;
@@ -78,6 +108,33 @@ public class PlayerLocator : MonoBehaviour
             SceneCam.transform.rotation = Quaternion.Euler(currentRotation.y, currentRotation.x, 0f);
             SetUserMarkerRotation(currentRotation.x);
         }
+    }
+
+
+    public float unitsPerMeter = 1f;
+
+    // Measure how many Unity units equal 1 meter at the current tileset size
+    public void CalibrateUnitsPerMeter()
+    {
+        if (tileset3D == null) return;
+
+        const double dMeters = 10.0;                  // small sample span
+        double dLat = dMeters / 111111.0;            // ~1m per 1/111,111 degree latitude
+
+        // Use either GetWorldPosition(...) or WithElevation(...). Both are fine; we'll ignore Y.
+        Vector3 a = tileset3D.GetWorldPosition(longitude, latitude);
+        Vector3 b = tileset3D.GetWorldPosition(longitude, latitude + dLat);
+
+        float du = Vector3.Distance(new Vector3(a.x, 0, a.z), new Vector3(b.x, 0, b.z));
+        unitsPerMeter = du / (float)dMeters;
+    }
+
+    // Apply real-world m/s to your controller using the calibrated scale
+    public void ApplyMovementCalibration(FirstPersonController fpc, float walkMps = 1.6f, float sprintMps = 3.5f)
+    {
+        if (fpc == null) return;
+        fpc.walkSpeed = walkMps * unitsPerMeter;   // e.g., 1.6 m/s walk
+        fpc.sprintSpeed = sprintMps * unitsPerMeter;   // e.g., 3.5 m/s jog/run
     }
 
 
@@ -129,31 +186,34 @@ public class PlayerLocator : MonoBehaviour
         userMarker.rotationDegree = rotation;
     }
 
+
+
+    public void SyncMarkerToCamera()
+    {
+        if (userMarker == null || SceneCam == null) return;
+        float camYaw = NormalizeAngle(SceneCam.transform.eulerAngles.y);
+        userMarker.rotationDegree = camYaw;
+    }
+
     public void SyncCameraToMarker()
     {
         if (userMarker == null || SceneCam == null) return;
 
         float yaw = NormalizeAngle(userMarker.rotationDegree);
 
-        currentRotation.x = yaw;
-
-        // Sync to camera orbit controller instead
-        var orbit = SceneCam.GetComponent<CameraOrbitController>();
-        if (orbit != null) orbit.SetRotation(yaw);
-
-        shouldApplySyncedRotation = false; // no longer needed
+        // Prefer FPSController if present so its internal yaw stays in sync
+        var fps = SceneCam.GetComponent<FPSController>();
+        if (fps != null)
+        {
+            fps.SnapYaw(yaw);
+        }
+        else
+        {
+            // Fallback: directly rotate the camera’s parent object
+            SceneCam.transform.parent?.Rotate(0f, yaw - SceneCam.transform.eulerAngles.y, 0f, Space.World);
+        }
     }
 
-    public void SyncMarkerToCamera()
-    {
-        if (userMarker == null) return;
-
-        float camYaw = NormalizeAngle(SceneCam.transform.eulerAngles.y);
-        currentRotation.x = camYaw;
-        userMarker.rotationDegree = camYaw;
-
-
-    }
 
     private float NormalizeAngle(float angle)
     {
@@ -162,7 +222,52 @@ public class PlayerLocator : MonoBehaviour
         return angle;
     }
 
+    public void CenterMapAndPlaceCamera()
+    {
+        if (map != null)
+        {
+            map.SetPositionAndZoom(longitude, latitude, 17);
+            map.Redraw();
+        }
 
+        if (map3d != null) // keep active!
+        {
+            map3d.SetPositionAndZoom(longitude, latitude, zoom3dLevel);
+            map3d.Redraw();
+        }
+
+        if (tileset3D != null && SceneCam != null)
+        {
+            Vector3 world = tileset3D.GetWorldPositionWithElevation(longitude, latitude);
+            world.y += cameraEyeHeight;
+            SceneCam.transform.position = world;
+        }
+
+        SyncCameraToMarker();
+        SyncMarkerToCamera();
+    }
+
+
+    public bool HasGroundUnderCamera(float maxDistance = 200f)  // ⬅ bump to 200f
+    {
+        if (SceneCam == null) return false;
+        return Physics.Raycast(
+            SceneCam.transform.position + Vector3.up * 0.1f,
+            Vector3.down,
+            maxDistance
+        );
+    }
+
+    public void SnapCameraToGroundOnce()
+    {
+        if (SceneCam == null) return;
+        if (Physics.Raycast(SceneCam.transform.position + Vector3.up * 2f, Vector3.down, out var hit, 200f))
+        {
+            var p = SceneCam.transform.position;
+            p.y = hit.point.y + cameraEyeHeight;
+            SceneCam.transform.position = p;
+        }
+    }
 
 
 }

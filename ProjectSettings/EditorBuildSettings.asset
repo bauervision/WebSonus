@@ -6,8 +6,8 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/WebSonus.unity
-    guid: 6bfa4179d532ab94ba9f63e54ca6c734
+    path: Assets/Scenes/MainTerrain.unity
+    guid: 86e31a8db65c71e459e8f7d785159c09
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0
