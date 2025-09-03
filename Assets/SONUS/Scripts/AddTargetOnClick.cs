@@ -24,10 +24,7 @@ public class AddTargetOnClick : MonoBehaviour
     private void Awake()
     {
         instance = this;
-        // targetTypeText = GameObject.Find("TargetTypeText").GetComponent<Text>();
-        // targetUpdateText = GameObject.Find("TargetUpdateText").GetComponent<Text>();
-        // targetLatText = GameObject.Find("TargetLatText").GetComponent<Text>();
-        // targetLonText = GameObject.Find("TargetLonText").GetComponent<Text>();
+
     }
 
     private void Start()

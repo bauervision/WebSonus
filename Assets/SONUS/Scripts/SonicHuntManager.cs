@@ -109,11 +109,11 @@ public class SonicHuntManager : MonoBehaviour
     {
         if (activeTarget == null || clueAudioSource == null) return;
 
-        Vector3 playerPos = PlayerLocator.instance.SceneCam.transform.position;
+        Vector3 playerPos = PlayerLocator.instance.playerRoot.position;
         Vector3 targetWorldPos = GeoUtils.GeoToWorld(new Vector2((float)activeTarget._Lat, (float)activeTarget._Lon));
         Vector3 directionToTarget = (targetWorldPos - playerPos).normalized;
 
-        float playerYaw = PlayerLocator.instance.SceneCam.transform.eulerAngles.y;
+        float playerYaw = PlayerLocator.instance.playerRoot.eulerAngles.y;
         float headingToTarget = Quaternion.LookRotation(directionToTarget).eulerAngles.y;
         float headingDiff = Mathf.DeltaAngle(playerYaw, headingToTarget);
 
@@ -172,7 +172,7 @@ public class SonicHuntManager : MonoBehaviour
                 Vector3 demoWorldPos = playerPos + forward * 100f; // 100m ahead
                 Vector2 demoLatLon = GeoUtils.WorldToGeo(demoWorldPos);
 
-                TargetActor demoTarget = TargetSceneManager.Instance.SpawnTarget(demoLatLon, TargetType.STATIONARY, skipMarker: true);
+                TargetActor demoTarget = TargetSceneManager.Instance.SpawnTarget(demoLatLon, TargetType.STATIONARY);
                 SetActiveTarget(demoTarget);
 
                 Debug.Log("[SONIC] No targets found — demo target spawned.");
@@ -316,11 +316,11 @@ public class SonicHuntManager : MonoBehaviour
         }
 
         // Real-time heading info
-        Vector3 playerPos = PlayerLocator.instance.SceneCam.transform.position;
+        Vector3 playerPos = PlayerLocator.instance.playerRoot.position;
         Vector3 targetWorldPos = GeoUtils.GeoToWorld(new Vector2((float)activeTarget._Lat, (float)activeTarget._Lon));
         Vector3 directionToTarget = (targetWorldPos - playerPos).normalized;
 
-        float playerYaw = PlayerLocator.instance.SceneCam.transform.eulerAngles.y;
+        float playerYaw = PlayerLocator.instance.playerRoot.eulerAngles.y;
         float headingToTarget = Quaternion.LookRotation(directionToTarget).eulerAngles.y;
         float headingDiff = Mathf.DeltaAngle(playerYaw, headingToTarget);
 

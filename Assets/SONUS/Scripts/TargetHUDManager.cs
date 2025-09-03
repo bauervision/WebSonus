@@ -73,6 +73,9 @@ public class TargetHUDManager : MonoBehaviour
     private int _missionVersion = 0;
 
 
+    private static Vector2 FromTuple((double lat, double lon) t) => new Vector2((float)t.lat, (float)t.lon); // Vector2(lat, lon)
+
+
     private void Awake()
     {
         instance = this;
@@ -163,7 +166,9 @@ public class TargetHUDManager : MonoBehaviour
     // --- NEW: Two dynamic targets (West & Southeast) ---
     private void LoadMission_WestAndSouthEastDynamics()
     {
-        Vector2 userGeo = PlayerLocator.instance.GetCurrentLocation();
+        // CHANGED:
+        Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
+
 
         // West ~220m
         var west = TargetSceneManager.Instance.SpawnTarget(
@@ -188,7 +193,8 @@ public class TargetHUDManager : MonoBehaviour
     // --- NEW: Single dynamic target (South) -> auto active ---
     private void LoadMission_SouthSingleDynamic()
     {
-        Vector2 userGeo = PlayerLocator.instance.GetCurrentLocation();
+        // CHANGED:
+        Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
 
         TargetActor south = TargetSceneManager.Instance.SpawnTarget(
             GeoUtils.OffsetLocation(userGeo, 180f, 180f), TargetType.DYNAMIC);
@@ -223,7 +229,7 @@ public class TargetHUDManager : MonoBehaviour
 
     void LoadMission_NESW()
     {
-        Vector2 userGeo = PlayerLocator.instance.GetCurrentLocation();
+        Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
         float[] distances = { 100f, 200f, 150f, 50f }; // meters
 
         CreateTargetFromOffset(userGeo, 0, distances[0], TargetType.STATIONARY);  // North
@@ -238,7 +244,7 @@ public class TargetHUDManager : MonoBehaviour
 
     IEnumerator LoadMission_NorthGroupAndSplit()
     {
-        Vector2 userGeo = PlayerLocator.instance.GetCurrentLocation();
+        Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
 
         TargetActor stationary = TargetSceneManager.Instance.SpawnTarget(
             GeoUtils.OffsetLocation(userGeo, 0f, 100f), TargetType.STATIONARY);
