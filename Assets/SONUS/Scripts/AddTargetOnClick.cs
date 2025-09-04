@@ -63,17 +63,9 @@ public class AddTargetOnClick : MonoBehaviour
             _Name = type == TargetType.STATIONARY ? "Stationary Target" : "Dynamic Target"
         };
 
-        Texture2D icon = GetIconForType(type);
-
-        var marker = OnlineMapsMarkerManager.CreateItem(lng, lat, icon);
-        marker.label = $"Target: {type}";
-        marker.align = OnlineMapsAlign.Center;
-        marker["data"] = newTarget;
-        marker.scale = 0.4f;
-        selectedMarker = marker;
 
         // Store it for scene view
-        TargetSceneManager.Instance.RegisterTarget(newTarget); // see next step
+        TargetSceneManager.Instance.RegisterTarget(newTarget, GetIconForType(type));
     }
 
 

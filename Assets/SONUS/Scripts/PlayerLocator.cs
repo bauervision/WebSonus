@@ -36,7 +36,13 @@ public class PlayerLocator : MonoBehaviour
     int zoom3dLevel = 19;
     private void Awake()
     {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         instance = this;
+
 
         if (playerRoot == null)
         {

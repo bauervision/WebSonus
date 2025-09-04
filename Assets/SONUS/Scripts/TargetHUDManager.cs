@@ -63,13 +63,14 @@ public class TargetHUDManager : MonoBehaviour
 
     private void Awake()
     {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         instance = this;
     }
 
-    void Start()
-    {
-        missionDropdown.onValueChanged.AddListener(OnMissionSelected);
-    }
 
     private void RegisterAndName(TargetActor t, string name)
     {
@@ -607,10 +608,7 @@ public class TargetHUDManager : MonoBehaviour
         return angle <= thresholdDegrees;
     }
 
-    public void ClearGroupingCache()
-    {
-        groupedTargets.Clear();
-    }
+    public void ClearGroupingCache() { groupedTargets.Clear(); }
 
     public void ClearHUD()
     {
@@ -752,10 +750,7 @@ public class TargetHUDManager : MonoBehaviour
         OnlineMaps.instance?.Redraw();
     }
 
-    private float GetBearingFromHistoryOrRecentMove(TargetActor actor)
-    {
-        return actor._Dir;
-    }
+    private float GetBearingFromHistoryOrRecentMove(TargetActor actor) { return actor._Dir; }
 
     private void SetMarkerRotationSafe(OnlineMapsMarker marker, float rotation)
     {

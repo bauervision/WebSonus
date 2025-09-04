@@ -8,6 +8,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
+
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -141,6 +143,9 @@ public class FirstPersonController : MonoBehaviour
     private float timer = 0;
 
     #endregion
+
+    public UnityEvent EnableUI = new();
+    public UnityEvent DisableUI = new();
 
     private void Awake()
     {
@@ -482,6 +487,8 @@ public class FirstPersonController : MonoBehaviour
 
             // hide the crosshair while interacting with UI
             if (crosshairObject != null) crosshairObject.gameObject.SetActive(false);
+
+            EnableUI.Invoke();
         }
         else
         {
@@ -498,6 +505,7 @@ public class FirstPersonController : MonoBehaviour
             enableSprint = _savedEnableSprint;
 
             if (crosshair && crosshairObject != null) crosshairObject.gameObject.SetActive(true);
+            DisableUI.Invoke();
         }
     }
 
