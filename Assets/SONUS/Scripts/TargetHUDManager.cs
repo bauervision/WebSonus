@@ -7,31 +7,22 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-
 [System.Serializable]
 public class RouteStep
 {
-    // If true, compute destination as offset from current via heading+distance.
-    // If false, go to absolute lat/lon in 'toGeo'.
     public bool useHeading = true;
-
-    [Range(0, 360)] public float headingDegrees = 0f;  // used when useHeading = true
-    public float distanceMeters = 0f;                 // used when useHeading = true
-
-    public Vector2 toGeo;                             // (lat, lon) used when useHeading = false
-
-    public float speedMetersPerSecond = 10.5f;        // movement speed for this leg
-    public float pauseAfterSeconds = 0f;              // pause after reaching this leg
+    [Range(0, 360)] public float headingDegrees = 0f;
+    public float distanceMeters = 0f;
+    public Vector2 toGeo; // (lat, lon) when useHeading = false
+    public float speedMetersPerSecond = 10.5f;
+    public float pauseAfterSeconds = 0f;
 }
 
 [System.Serializable]
 public class Waypoint
 {
-    // Absolute destination in (lat, lon)
-    public Vector2 latLon;
-    // Speed used when traveling FROM this point TO the next point (m/s)
+    public Vector2 latLon;           // (lat, lon)
     public float speedToNext = 10.5f;
-    // Pause AFTER arriving at this point (seconds)
     public float pauseAfterSeconds = 0f;
 
     public Waypoint(Vector2 latLon, float speedToNext = 10.5f, float pause = 0f)
@@ -43,10 +34,6 @@ public class Waypoint
 }
 
 public enum RouteMode { Once, Loop, PingPong, PingPongOnce }
-
-
-
-
 
 public class TargetHUDManager : MonoBehaviour
 {
@@ -60,21 +47,19 @@ public class TargetHUDManager : MonoBehaviour
     public GameObject multiTargetPopup;
 
     [SerializeField] private Color activeHighlightColor = Color.cyan;
-    private Dictionary<string, GameObject> activeReticles = new();
-    private Dictionary<string, GameObject> activeIndicators = new();
 
-    // Track one running route per actor so new routes cancel old ones.
+    private readonly Dictionary<string, GameObject> activeReticles = new();
+    private readonly Dictionary<string, GameObject> activeIndicators = new();
+
+    // CHANGED: cache from actor _ID -> Transform (found via TargetProxy)
+    private readonly Dictionary<string, Transform> _idToTransform = new();
+
     private readonly Dictionary<string, Coroutine> _activeRoutes = new();
-
-    private bool visualsEnabled = true; // default AR on
-
-    private HashSet<string> groupedTargets = new();
-
+    private bool visualsEnabled = true;
+    private readonly HashSet<string> groupedTargets = new();
     private int _missionVersion = 0;
 
-
-    private static Vector2 FromTuple((double lat, double lon) t) => new Vector2((float)t.lat, (float)t.lon); // Vector2(lat, lon)
-
+    private static Vector2 FromTuple((double lat, double lon) t) => new Vector2((float)t.lat, (float)t.lon);
 
     private void Awake()
     {
@@ -86,21 +71,39 @@ public class TargetHUDManager : MonoBehaviour
         missionDropdown.onValueChanged.AddListener(OnMissionSelected);
     }
 
-
     private void RegisterAndName(TargetActor t, string name)
     {
         if (!string.IsNullOrEmpty(name)) t._Name = name;
 
-        var marker = t.GetMarker();
-        if (marker != null)
-        {
-            marker["data"] = t;
-            marker["id"] = t._ID;
-            marker.label = $"Target: {t._Name}";
-        }
+        // Make sure the 2D marker exists
+        Ensure2DMarkerFor(t);
+
+        // Register with your manager
         ActiveTargetManager.Instance.Register(t);
+
+        // If it's dynamic and no route is active yet, give it a default patrol
+        if ((TargetType)t._Type == TargetType.DYNAMIC && !_activeRoutes.ContainsKey(t._ID))
+        {
+            StartDefaultDynamicPatrol(t, rMeters: 120f, speed: 9f);
+        }
     }
 
+    private void StartDefaultDynamicPatrol(TargetActor actor, float rMeters = 120f, float speed = 9f)
+    {
+        // Triangle around the spawn
+        Vector2 A = new Vector2((float)actor._Lat, (float)actor._Lon);
+        Vector2 B = GeoUtils.OffsetLocation(A, 45f, rMeters * 0.9f);
+        Vector2 C = GeoUtils.OffsetLocation(A, 200f, rMeters * 1.1f);
+
+        var pts = new List<Waypoint>
+    {
+        new Waypoint(A, speed,   1.5f),
+        new Waypoint(B, speed+2, 1.0f),
+        new Waypoint(C, speed-1, 0.8f),
+    };
+
+        StartWaypointRoute(actor, pts, RouteMode.PingPong);
+    }
     public void SetVisualsEnabled(bool enable)
     {
         if (visualsEnabled == enable) return;
@@ -114,9 +117,10 @@ public class TargetHUDManager : MonoBehaviour
         else
         {
             ClearGroupingCache();
-            RefreshAll(); // redraw once when returning to AR
+            RefreshAll();
         }
     }
+
     private bool IsActiveTarget(string id)
     {
         var a = ActiveTargetManager.Instance?.ActiveTarget;
@@ -131,69 +135,44 @@ public class TargetHUDManager : MonoBehaviour
         foreach (var i in activeIndicators.Values) i.SetActive(false);
     }
 
-    // call this when AR becomes active to force a redraw
     public void RefreshAll()
     {
-        foreach (var t in TargetSceneManager.Instance.ActiveTargets)
-            UpdateTargetUI(t);
+        foreach (var t in TargetSceneManager.Instance.ActiveTargets) UpdateTargetUI(t);
     }
 
     public void OnMissionSelected(int index)
     {
-
         ClearHUD();
 
         switch (index)
         {
-            case 1:
-                LoadMission_SouthSingleDynamic();
-                break;
-            case 2:
-                LoadMission_WestAndSouthEastDynamics();
-                break;
-            case 3:
-                StartCoroutine(LoadMission_NorthGroupAndSplit());
-                break;
-            case 4:
-                LoadMission_NESW();
-                break;
-            default:
-                Debug.LogWarning("Invalid mission selected");
-                break;
+            case 1: LoadMission_SouthSingleDynamic(); break;
+            case 2: LoadMission_WestAndSouthEastDynamics(); break;
+            case 3: StartCoroutine(LoadMission_NorthGroupAndSplit()); break;
+            case 4: LoadMission_NESW(); break;
+            default: Debug.LogWarning("Invalid mission selected"); break;
         }
     }
 
-    // --- NEW: Two dynamic targets (West & Southeast) ---
+    // ---------------- Missions ----------------
+
     private void LoadMission_WestAndSouthEastDynamics()
     {
-        // CHANGED:
         Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
 
-
-        // West ~220m
         var west = TargetSceneManager.Instance.SpawnTarget(
             GeoUtils.OffsetLocation(userGeo, 270f, 220f), TargetType.DYNAMIC);
         RegisterAndName(west, "West Dynamic");
 
-        // Southeast ~160m
         var se = TargetSceneManager.Instance.SpawnTarget(
             GeoUtils.OffsetLocation(userGeo, 135f, 160f), TargetType.DYNAMIC);
         RegisterAndName(se, "Southeast Dynamic");
 
-        FinalizeMissionUI(); // shows popup (2 targets)
-
-        // Leave active target unset so user can choose (great for testing selection / Sonic)
-        // If you prefer auto-select nearest, uncomment:
-        // var nearest = (Vector3.Distance(sceneCamera.transform.position, GeoUtils.GeoToWorld(new Vector2((float)west._Lat, (float)west._Lon))) <
-        //                Vector3.Distance(sceneCamera.transform.position, GeoUtils.GeoToWorld(new Vector2((float)se._Lat, (float)se._Lon)))) ? west : se;
-        // ActiveTargetManager.Instance.SetActiveTarget(nearest);
-        // RefreshAll();
+        FinalizeMissionUI();
     }
 
-    // --- NEW: Single dynamic target (South) -> auto active ---
     private void LoadMission_SouthSingleDynamic()
     {
-        // CHANGED:
         Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
 
         TargetActor south = TargetSceneManager.Instance.SpawnTarget(
@@ -204,43 +183,32 @@ public class TargetHUDManager : MonoBehaviour
         RefreshAll();
         FinalizeMissionUI();
 
-        // Build 3 points: A at spawn, B from A, C from A (or from B—your choice)
         Vector2 A = new Vector2((float)south._Lat, (float)south._Lon);
-        Vector2 B = GeoUtils.OffsetLocation(A, 300f, 300f); // 300° / 300m
-        Vector2 C = GeoUtils.OffsetLocation(A, 135f, 200f); // 135° / 200m
+        Vector2 B = GeoUtils.OffsetLocation(A, 300f, 300f);
+        Vector2 C = GeoUtils.OffsetLocation(A, 135f, 200f);
 
         var points = new List<Waypoint>
-    {
-        new Waypoint(A, 10.5f,  5f), // leave A at 10.5 m/s, pause 5s when (re)arriving A
-        new Waypoint(B,  8.0f, 10f), // leave B at 8 m/s,   pause 10s when arriving B
-        new Waypoint(C, 12.0f,  2f), // leave C at 12 m/s,  pause 2s  when arriving C
-    };
+        {
+            new Waypoint(A, 10.5f, 5f),
+            new Waypoint(B, 8.0f, 10f),
+            new Waypoint(C, 12.0f, 2f),
+        };
 
-        // A → B → C → B → A → stop (nice for Sonic Hunt scenarios)
         StartWaypointRoute(south, points, RouteMode.PingPong);
-
-        // Alternatives:
-        // StartWaypointRoute(south, points, RouteMode.Once);      // A → B → C stop
-        // StartWaypointRoute(south, points, RouteMode.Loop);      // A → B → C → A …
-        // StartWaypointRoute(south, points, RouteMode.PingPong);  // A → B → C → B → A … (repeat)
     }
-
-
 
     void LoadMission_NESW()
     {
         Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
-        float[] distances = { 100f, 200f, 150f, 50f }; // meters
+        float[] distances = { 100f, 200f, 150f, 50f };
 
-        CreateTargetFromOffset(userGeo, 0, distances[0], TargetType.STATIONARY);  // North
-        CreateTargetFromOffset(userGeo, 90, distances[1], TargetType.DYNAMIC);    // East
+        CreateTargetFromOffset(userGeo, 0, distances[0], TargetType.STATIONARY);   // North
+        CreateTargetFromOffset(userGeo, 90, distances[1], TargetType.DYNAMIC);     // East
         CreateTargetFromOffset(userGeo, 180, distances[2], TargetType.STATIONARY); // South
-        CreateTargetFromOffset(userGeo, 270, distances[3], TargetType.DYNAMIC);   // West
+        CreateTargetFromOffset(userGeo, 270, distances[3], TargetType.DYNAMIC);    // West
 
-        FinalizeMissionUI(); // shows popup (4 targets)
-
+        FinalizeMissionUI();
     }
-
 
     IEnumerator LoadMission_NorthGroupAndSplit()
     {
@@ -254,7 +222,6 @@ public class TargetHUDManager : MonoBehaviour
             GeoUtils.OffsetLocation(userGeo, 0f, 110f), TargetType.DYNAMIC);
         dynamic._Name = "North Dynamic";
 
-        // attach to markers + register (you already do this)
         foreach (var t in new[] { stationary, dynamic })
         {
             var marker = t.GetMarker();
@@ -267,23 +234,19 @@ public class TargetHUDManager : MonoBehaviour
             ActiveTargetManager.Instance.Register(t);
         }
 
-        FinalizeMissionUI(); // shows popup (2 targets)
+        FinalizeMissionUI();
 
         yield return new WaitForSeconds(5f);
-
         yield return StartCoroutine(MoveTargetByHeading(dynamic, 135f, 300f, 10.5f));
     }
-
 
     TargetActor CreateTargetFromOffset(Vector2 origin, float headingDegrees, float distanceMeters, TargetType type)
     {
         Vector2 newGeo = GeoUtils.OffsetLocation(origin, headingDegrees, distanceMeters);
         var target = TargetSceneManager.Instance.SpawnTarget(newGeo, type);
 
-        // Name it based on heading
-        target._Name = GetCardinalName(headingDegrees); // "North", "East", etc.
+        target._Name = GetCardinalName(headingDegrees);
 
-        // Attach to marker + id
         var marker = target.GetMarker();
         if (marker != null)
         {
@@ -298,7 +261,6 @@ public class TargetHUDManager : MonoBehaviour
 
     private string GetCardinalName(float heading)
     {
-        // 0=N, 90=E, 180=S, 270=W
         float h = (heading % 360 + 360) % 360;
         if (h >= 315 || h < 45) return "North";
         if (h < 135) return "East";
@@ -306,17 +268,67 @@ public class TargetHUDManager : MonoBehaviour
         return "West";
     }
 
+    // ---------------- World→Canvas projection (CHANGED) ----------------
 
+    bool WorldToCanvas(Vector3 world, out Vector2 canvasPos)
+    {
+        canvasPos = default;
+        if (sceneCamera == null || canvas == null) return false;
+
+        Vector3 screen = sceneCamera.WorldToScreenPoint(world);
+        if (screen.z <= 0f) return false; // behind camera
+
+        var cv = canvas.GetComponent<Canvas>();
+        var camForCanvas = (cv != null && cv.renderMode == RenderMode.ScreenSpaceOverlay) ? null : sceneCamera;
+
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas, screen, camForCanvas, out canvasPos);
+    }
+
+    // Get the authoritative 3D position for this actor (CHANGED)
+    Vector3 GetWorldPosForTarget(TargetActor t)
+    {
+        var tr = ResolveTargetTransform(t);
+        if (tr != null) return tr.position;
+        // Fallback if proxy not found (should be rare)
+        return GeoUtils.GeoToWorld(new Vector2((float)t._Lat, (float)t._Lon));
+    }
+
+    // Resolve and cache Transform for an actor via TargetProxy (CHANGED)
+    Transform ResolveTargetTransform(TargetActor t)
+    {
+        if (t == null || string.IsNullOrEmpty(t._ID)) return null;
+        if (_idToTransform.TryGetValue(t._ID, out var tr) && tr != null) return tr;
+
+        // Slow path: find by scanning proxies (typical target counts are small)
+        var proxies = FindObjectsOfType<TargetProxy>();
+        foreach (var p in proxies)
+        {
+            if (p != null && p.actor != null && p.actor._ID == t._ID)
+            {
+                _idToTransform[t._ID] = p.transform;
+                return p.transform;
+            }
+        }
+        return null;
+    }
+
+    // ---------------- Per-target UI ----------------
 
     public void UpdateTargetUI(TargetActor target)
     {
         if (!visualsEnabled) { HideReticle(target._ID); HideIndicator(target._ID); return; }
-
         if (groupedTargets.Contains(target._ID)) return;
 
-        Vector3 worldPos = GeoUtils.GeoToWorld(new Vector2((float)target._Lat, (float)target._Lon));
-        worldPos.y = sceneCamera.transform.position.y;
-        Vector3 screenPos = sceneCamera.WorldToViewportPoint(worldPos);
+        // CHANGED: use the actual 3D position (no Y flattening)
+        Vector3 worldPos = GetWorldPosForTarget(target);
+
+        // Project to canvas; if off-screen/behind camera, hide
+        if (!WorldToCanvas(worldPos, out Vector2 anchoredPos))
+        {
+            HideReticle(target._ID);
+            ShowDirectionIndicator(target._ID, worldPos); // still show direction pointer
+            return;
+        }
 
         var groupMembers = FindNearbyTargets(target);
         groupMembers.Add(target);
@@ -325,9 +337,9 @@ public class TargetHUDManager : MonoBehaviour
 
         if (groupMembers.Count > 1)
         {
+            // Choose representative = closest to camera in world space (CHANGED)
             var closest = groupMembers
-                .OrderBy(t => Vector3.Distance(sceneCamera.transform.position,
-                    GeoUtils.GeoToWorld(new Vector2((float)t._Lat, (float)t._Lon))))
+                .OrderBy(t => Vector3.Distance(sceneCamera.transform.position, GetWorldPosForTarget(t)))
                 .First();
 
             groupedTargets.UnionWith(groupMembers.Select(t => t._ID));
@@ -335,8 +347,7 @@ public class TargetHUDManager : MonoBehaviour
 
             if (isRepresentative)
             {
-                // Cyan if active; otherwise keep original group color logic inside ShowReticle
-                ShowReticle(target._ID, screenPos, worldPos, groupMembers.Count,
+                ShowReticle(target._ID, anchoredPos, worldPos, groupMembers.Count,
                             isActive ? activeHighlightColor : (Color?)null);
             }
             else HideReticle(target._ID);
@@ -345,25 +356,22 @@ public class TargetHUDManager : MonoBehaviour
             return;
         }
 
-        // non-grouped
+        // non-grouped visibility cone (uses world vectors)
         Vector3 toTarget = (worldPos - sceneCamera.transform.position).normalized;
         Vector3 forward = sceneCamera.transform.forward; forward.y = 0; toTarget.y = 0;
         float angleToTarget = Vector3.Angle(forward, toTarget);
-        bool isVisible = angleToTarget <= 60f && screenPos.z > 0;
+        bool isVisible = angleToTarget <= 60f;
 
         if (isVisible)
-            ShowReticle(target._ID, screenPos, worldPos, 0, isActive ? activeHighlightColor : (Color?)null);
+            ShowReticle(target._ID, anchoredPos, worldPos, 0, isActive ? activeHighlightColor : (Color?)null);
         else
             HideReticle(target._ID);
 
         ShowDirectionIndicator(target._ID, worldPos);
     }
 
-
-
-
-
-    private void ShowReticle(string id, Vector3 viewportPos, Vector3 worldPos, int groupedCount = 0, Color? overrideColor = null)
+    // CHANGED: take anchored canvas pos directly
+    private void ShowReticle(string id, Vector2 anchoredPos, Vector3 worldPos, int groupedCount = 0, Color? overrideColor = null)
     {
         if (!activeReticles.TryGetValue(id, out GameObject reticle))
         {
@@ -372,8 +380,6 @@ public class TargetHUDManager : MonoBehaviour
         }
         reticle.SetActive(true);
 
-        Vector2 anchoredPos = new((viewportPos.x - 0.5f) * canvas.rect.width,
-                                  (viewportPos.y - 0.5f) * canvas.rect.height);
         reticle.GetComponent<RectTransform>().anchoredPosition = anchoredPos;
 
         var target = TargetSceneManager.Instance.GetTargetById(id);
@@ -401,7 +407,6 @@ public class TargetHUDManager : MonoBehaviour
                 }
                 else
                 {
-                    // existing group coloring (all same type → solid, mixed → gradient)
                     var groupMembers = FindNearbyTargets(target); groupMembers.Add(target);
                     bool allSameType = groupMembers.All(t => t._Type == groupMembers[0]._Type);
 
@@ -418,7 +423,7 @@ public class TargetHUDManager : MonoBehaviour
                             new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) }
                         );
                         mpImage.GradientEffect = effect;
-                        mpImage.color = Color.white; // required for gradient
+                        mpImage.color = Color.white;
                     }
                 }
                 mpImage.SetAllDirty();
@@ -452,9 +457,6 @@ public class TargetHUDManager : MonoBehaviour
         }
     }
 
-
-
-
     private List<TargetActor> FindNearbyTargets(TargetActor baseTarget)
     {
         List<TargetActor> nearby = new();
@@ -472,9 +474,6 @@ public class TargetHUDManager : MonoBehaviour
         return nearby;
     }
 
-
-
-
     private void ShowDirectionIndicator(string id, Vector3 worldPos)
     {
         if (!visualsEnabled) { HideIndicator(id); return; }
@@ -491,8 +490,7 @@ public class TargetHUDManager : MonoBehaviour
         if (isGrouped)
         {
             var closest = groupMembers
-                .OrderBy(t => Vector3.Distance(sceneCamera.transform.position,
-                    GeoUtils.GeoToWorld(new Vector2((float)t._Lat, (float)t._Lon))))
+                .OrderBy(t => Vector3.Distance(sceneCamera.transform.position, GetWorldPosForTarget(t)))
                 .First();
 
             groupedTargets.UnionWith(groupMembers.Select(t => t._ID));
@@ -507,7 +505,6 @@ public class TargetHUDManager : MonoBehaviour
         }
         indicatorGO.SetActive(true);
 
-        // rotation (unchanged) ...
         Vector3 toTarget = worldPos - sceneCamera.transform.position; toTarget.y = 0;
         float angleToTarget = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
         float cameraYaw = sceneCamera.transform.eulerAngles.y;
@@ -535,7 +532,6 @@ public class TargetHUDManager : MonoBehaviour
                 }
                 else
                 {
-                    // existing grouped coloring
                     bool allSameType = groupMembers.All(t => t._Type == groupMembers[0]._Type);
                     if (!allSameType)
                     {
@@ -564,7 +560,6 @@ public class TargetHUDManager : MonoBehaviour
                     : (target._Type == (int)TargetType.STATIONARY ? Color.red : Color.green);
             }
 
-            // fade alpha by angle (keep behavior)
             float absAngle = Mathf.Abs(relativeAngle);
             float fadeThreshold = 50f;
             var c = mpImage.color;
@@ -572,7 +567,6 @@ public class TargetHUDManager : MonoBehaviour
             mpImage.color = c;
         }
 
-        // triangle scale throb unchanged...
         if (triangle != null && !isGrouped)
         {
             float distance = Vector3.Distance(sceneCamera.transform.position, worldPos);
@@ -586,9 +580,6 @@ public class TargetHUDManager : MonoBehaviour
         }
     }
 
-
-
-
     private void HideReticle(string id)
     {
         if (activeReticles.TryGetValue(id, out GameObject reticle))
@@ -601,13 +592,13 @@ public class TargetHUDManager : MonoBehaviour
             indicator.SetActive(false);
     }
 
-
+    // CHANGED: use transforms instead of recomputed geo → world when possible
     private bool IsWithinHeadingRange(TargetActor t1, TargetActor t2, float thresholdDegrees = 10f)
     {
         Vector3 userPos = sceneCamera.transform.position;
 
-        Vector3 dir1 = GeoUtils.GeoToWorld(new Vector2((float)t1._Lat, (float)t1._Lon)) - userPos;
-        Vector3 dir2 = GeoUtils.GeoToWorld(new Vector2((float)t2._Lat, (float)t2._Lon)) - userPos;
+        Vector3 dir1 = GetWorldPosForTarget(t1) - userPos;
+        Vector3 dir2 = GetWorldPosForTarget(t2) - userPos;
 
         dir1.y = 0;
         dir2.y = 0;
@@ -621,29 +612,24 @@ public class TargetHUDManager : MonoBehaviour
         groupedTargets.Clear();
     }
 
-
     public void ClearHUD()
     {
-
-        _missionVersion++; // invalidate in-flight coroutines
+        _missionVersion++;
 
         foreach (var kv in _activeRoutes) { if (kv.Value != null) StopCoroutine(kv.Value); }
         _activeRoutes.Clear();
 
-        foreach (var reticle in activeReticles.Values)
-            Destroy(reticle);
-        foreach (var indicator in activeIndicators.Values)
-            Destroy(indicator);
-
+        foreach (var reticle in activeReticles.Values) Destroy(reticle);
+        foreach (var indicator in activeIndicators.Values) Destroy(indicator);
         activeReticles.Clear();
         activeIndicators.Clear();
 
         if (multiTargetPopup) multiTargetPopup.SetActive(false);
 
-        // Remove all map markers
         OnlineMapsMarkerManager.instance.RemoveAll();
-        // add the player back
         PlayerLocator.instance?.RestoreUserMarker();
+
+        _idToTransform.Clear(); // CHANGED: also clear transform cache
 
         TargetSceneManager.Instance.ClearAllTargets();
     }
@@ -654,12 +640,11 @@ public class TargetHUDManager : MonoBehaviour
         if (multiTargetPopup) multiTargetPopup.SetActive(multiple);
     }
 
+    // ---------------- Movement helpers (unchanged except comments) ----------------
 
     public IEnumerator MoveTargetSmoothly(TargetActor actor, Vector2 destination, float duration = 2f)
     {
-        // Marker is optional. We'll update it if usable, but never stop the route because of it.
         OnlineMapsMarker marker = actor.GetMarker();
-
         int myVersion = _missionVersion;
 
         Vector2 start = new Vector2((float)actor._Lon, (float)actor._Lat); // (lon, lat)
@@ -674,11 +659,9 @@ public class TargetHUDManager : MonoBehaviour
             float t = Mathf.Clamp01(elapsed / duration);
             Vector2 current = Vector2.Lerp(start, end, t);
 
-            // Always update the actor position (core simulation)
             actor._Lat = current.y;
             actor._Lon = current.x;
 
-            // Update marker only if usable (no-op otherwise)
             if (IsMarkerUsable(marker))
             {
                 marker.position = current;
@@ -692,11 +675,18 @@ public class TargetHUDManager : MonoBehaviour
                 if (map != null && map.gameObject.activeInHierarchy) map.Redraw();
             }
 
+            // CHANGED: prompt the binder’d GO to update immediately (if present)
+            var tr = ResolveTargetTransform(actor);
+            if (tr != null)
+            {
+                var binder = tr.GetComponent<TargetGeoBinder>();
+                if (binder != null) binder.Apply(false);
+            }
+
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        // Final position
         if (myVersion != _missionVersion) yield break;
 
         actor._Lat = destination.x;
@@ -717,9 +707,15 @@ public class TargetHUDManager : MonoBehaviour
 
         actor._Alt = OnlineMapsElevationManagerBase.GetUnscaledElevationByCoordinate(actor._Lon, actor._Lat);
         actor._Time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+
+        // CHANGED: final binder apply
+        var trFinal = ResolveTargetTransform(actor);
+        if (trFinal != null)
+        {
+            var binder = trFinal.GetComponent<TargetGeoBinder>();
+            if (binder != null) binder.Apply(false);
+        }
     }
-
-
 
     public IEnumerator MoveTargetByHeading(TargetActor actor, float headingDegrees, float distanceMeters, float speedMetersPerSecond)
     {
@@ -731,16 +727,13 @@ public class TargetHUDManager : MonoBehaviour
         yield return StartCoroutine(MoveTargetSmoothly(actor, endGeo, duration));
     }
 
-
     private float GetBearing(Vector2 from, Vector2 to)
     {
         float dLon = to.x - from.x;
         float dLat = to.y - from.y;
         float angle = Mathf.Atan2(dLon, dLat) * Mathf.Rad2Deg;
-        return (angle + 360f) % 360f; // Normalize to 0–360
+        return (angle + 360f) % 360f;
     }
-
-
 
     public void SyncAllMarkersToTargetPositions()
     {
@@ -761,26 +754,18 @@ public class TargetHUDManager : MonoBehaviour
 
     private float GetBearingFromHistoryOrRecentMove(TargetActor actor)
     {
-        // If you track historical positions, calculate based on last two
-        // Otherwise, just return actor._Dir or fallback
-        return actor._Dir; // or 0f if unknown
+        return actor._Dir;
     }
-
 
     private void SetMarkerRotationSafe(OnlineMapsMarker marker, float rotation)
     {
         if (marker == null) return;
 
         var map = OnlineMaps.instance;
-        if (map == null || map.gameObject == null || !map.gameObject.activeInHierarchy || map.control == null)
-        {
-            // Don't attempt to rotate if the map or control is disabled
-            return;
-        }
+        if (map == null || map.gameObject == null || !map.gameObject.activeInHierarchy || map.control == null) return;
 
         marker.rotationDegree = rotation;
     }
-
 
     private bool IsMarkerUsable(OnlineMapsMarker marker)
     {
@@ -793,37 +778,27 @@ public class TargetHUDManager : MonoBehaviour
         var mm = OnlineMapsMarkerManager.instance;
         if (mm == null) return false;
 
-        // Ensure marker wasn't removed
         try
         {
             foreach (var m in mm.items)
                 if (ReferenceEquals(m, marker)) return true;
         }
-        catch { /* items may change mid-iteration; treat as unusable */ }
+        catch { }
 
         return false;
     }
 
     private bool SafeSetMarkerPosition(OnlineMapsMarker marker, Vector2 pos)
     {
-        if (IsMarkerUsable(marker))
-        {
-            marker.position = pos;
-        }
-        // If not usable, silently no-op but still "succeed" so movement continues.
+        if (IsMarkerUsable(marker)) marker.position = pos;
         return true;
     }
 
-
-
-
-    // optional sugar for building steps in code
     private RouteStep HeadingStep(float heading, float distance, float speed, float pause = 0f)
         => new RouteStep { useHeading = true, headingDegrees = heading, distanceMeters = distance, speedMetersPerSecond = speed, pauseAfterSeconds = pause };
 
     private RouteStep ToGeoStep(Vector2 latLon, float speed, float pause = 0f)
         => new RouteStep { useHeading = false, toGeo = latLon, speedMetersPerSecond = speed, pauseAfterSeconds = pause };
-
 
     public void StopRoute(TargetActor actor)
     {
@@ -832,14 +807,10 @@ public class TargetHUDManager : MonoBehaviour
         _activeRoutes.Remove(actor._ID);
     }
 
-
     public void StartWaypointRoute(TargetActor actor, List<Waypoint> points, RouteMode mode)
     {
         if (actor == null || points == null || points.Count < 2) return;
-
-        // cancel any existing
         StopRoute(actor);
-
         var co = StartCoroutine(RunWaypointRoute(actor, points, mode));
         _activeRoutes[actor._ID] = co;
     }
@@ -849,7 +820,6 @@ public class TargetHUDManager : MonoBehaviour
         int myVersion = _missionVersion;
         int n = points.Count;
 
-        // Helpers to get leg endpoints by mode
         IEnumerable<(int from, int to)> LegSequence()
         {
             switch (mode)
@@ -857,22 +827,18 @@ public class TargetHUDManager : MonoBehaviour
                 case RouteMode.Once:
                     for (int i = 0; i < n - 1; i++) yield return (i, i + 1);
                     break;
-
                 case RouteMode.Loop:
                     while (true)
                     {
                         for (int i = 0; i < n - 1; i++) yield return (i, i + 1);
-                        yield return (n - 1, 0); // wrap back to A
+                        yield return (n - 1, 0);
                     }
-                // ReSharper disable once IteratorNeverReturns
-                // (intended infinite)
                 case RouteMode.PingPong:
                 case RouteMode.PingPongOnce:
                     {
-                        // Build one cycle: 0→1→…→n-1→n-2→…→1
                         var cycle = new List<(int, int)>();
-                        for (int i = 0; i < n - 1; i++) cycle.Add((i, i + 1));      // forward
-                        for (int i = n - 1; i >= 1; i--) cycle.Add((i, i - 1));     // backward
+                        for (int i = 0; i < n - 1; i++) cycle.Add((i, i + 1));
+                        for (int i = n - 1; i >= 1; i--) cycle.Add((i, i - 1));
 
                         if (mode == RouteMode.PingPongOnce)
                         {
@@ -897,15 +863,12 @@ public class TargetHUDManager : MonoBehaviour
             var from = points[fromIdx];
             var to = points[toIdx];
 
-            // Duration from geo distance & speed on the *from* point
             float meters = HaversineMeters(from.latLon, to.latLon);
             float speed = Mathf.Max(0.01f, from.speedToNext);
             float duration = meters / speed;
 
-            // Move (your coroutine expects destination (lat,lon) + duration)
             yield return StartCoroutine(MoveTargetSmoothly(actor, to.latLon, duration));
 
-            // Pause after arrival at 'to'
             float pause = Mathf.Max(0f, to.pauseAfterSeconds);
             if (pause > 0f)
             {
@@ -917,62 +880,45 @@ public class TargetHUDManager : MonoBehaviour
                     yield return null;
                 }
             }
-
-            // If RouteMode.Once: the iterator ends after last leg automatically.
         }
 
-        // done
         _activeRoutes.Remove(actor._ID);
     }
 
-
-    // Run a sequence once; set loop=true to repeat; pingPong not included here to keep it simple (can add later).
     public void StartRoute(TargetActor actor, IList<RouteStep> steps, bool loop = false)
     {
         if (actor == null || steps == null || steps.Count == 0) return;
-
-        // Cancel any existing route for this actor
         StopRoute(actor);
-
         var co = StartCoroutine(RunRoute(actor, steps, loop));
         _activeRoutes[actor._ID] = co;
     }
 
     private IEnumerator RunRoute(TargetActor actor, IList<RouteStep> steps, bool loop)
     {
-        // Capture mission version so clearing missions cancels mid-route.
         int myVersion = _missionVersion;
 
         while (true)
         {
             for (int i = 0; i < steps.Count; i++)
             {
-                if (myVersion != _missionVersion) yield break; // mission changed
+                if (myVersion != _missionVersion) yield break;
 
                 var step = steps[i];
+                Vector2 currentGeo = new Vector2((float)actor._Lat, (float)actor._Lon);
+                Vector2 destination = step.useHeading
+                    ? GeoUtils.OffsetLocation(currentGeo, step.headingDegrees, step.distanceMeters)
+                    : step.toGeo;
 
-                // Compute destination (lat, lon)
-                Vector2 currentGeo = new Vector2((float)actor._Lat, (float)actor._Lon); // (lat, lon)
-                Vector2 destination;
+                // ✅ meters-based duration (correct for absolute lat/lon legs)
+                float metersToGo = step.useHeading
+                    ? step.distanceMeters
+                    : HaversineMeters(currentGeo, destination);
 
-                if (step.useHeading)
-                {
-                    destination = GeoUtils.OffsetLocation(currentGeo, step.headingDegrees, step.distanceMeters);
-                }
-                else
-                {
-                    destination = step.toGeo; // absolute (lat, lon)
-                }
+                float speed = Mathf.Max(0.01f, step.speedMetersPerSecond);
+                float duration = Mathf.Max(0.01f, metersToGo / speed);
 
-                // Move there at given speed
-                float duration = Mathf.Max(0.01f, step.distanceMeters > 0f && step.useHeading
-                    ? step.distanceMeters / Mathf.Max(0.01f, step.speedMetersPerSecond)
-                    : Vector2.Distance(new Vector2((float)actor._Lat, (float)actor._Lon), destination) / Mathf.Max(0.01f, step.speedMetersPerSecond));
-
-                // Your MoveTargetSmoothly expects (actor, destination(lat,lon), durationSeconds)
                 yield return StartCoroutine(MoveTargetSmoothly(actor, destination, duration));
 
-                // Optional pause
                 if (step.pauseAfterSeconds > 0f)
                 {
                     float t = 0f;
@@ -986,90 +932,15 @@ public class TargetHUDManager : MonoBehaviour
             }
 
             if (!loop) break;
-            // loop: repeat from first step
         }
 
-        // finished
         _activeRoutes.Remove(actor._ID);
-    }
-
-
-
-
-    // Start a ping-pong route across the given waypoints (A..Z..A..)
-    public void StartWaypointPingPong(TargetActor actor, List<Waypoint> points)
-    {
-        if (actor == null || points == null || points.Count < 2) return;
-
-        // cancel any existing
-        StopRoute(actor);
-
-        var co = StartCoroutine(RunWaypointPingPong(actor, points));
-        _activeRoutes[actor._ID] = co;
-    }
-
-    private IEnumerator RunWaypointPingPong(TargetActor actor, List<Waypoint> points)
-    {
-        // mission guard
-        int myVersion = _missionVersion;
-
-        // Precompute the index pattern: 0->1->...->N-1->N-2->...->1 and repeat
-        int n = points.Count;
-        var forward = new List<int>(n);
-        for (int i = 0; i < n; i++) forward.Add(i);
-
-        var backward = new List<int>(Mathf.Max(0, n - 2));
-        for (int i = n - 2; i >= 1; i--) backward.Add(i);
-
-        var cycle = new List<int>(forward.Count + backward.Count);
-        cycle.AddRange(forward);
-        cycle.AddRange(backward);
-        // Example n=3 => cycle: [0,1,2,1] repeating
-
-        // Start from actor's current position; assume it is at points[0] or near it
-        int idx = 0;
-
-        while (true)
-        {
-            // from cycle[idx] to cycle[idx+1]
-            int fromIdx = cycle[idx % cycle.Count];
-            int toIdx = cycle[(idx + 1) % cycle.Count];
-
-            if (myVersion != _missionVersion) yield break;
-
-            Waypoint from = points[fromIdx];
-            Waypoint to = points[toIdx];
-
-            // distance -> duration using 'from.speedToNext'
-            float meters = HaversineMeters(from.latLon, to.latLon); // geo distance in meters
-            float speed = Mathf.Max(0.01f, from.speedToNext);
-            float duration = meters / speed;
-
-            // Move
-            yield return StartCoroutine(MoveTargetSmoothly(actor, to.latLon, duration));
-
-            // Pause AFTER arriving at 'to'
-            float pause = Mathf.Max(0f, to.pauseAfterSeconds);
-            if (pause > 0f)
-            {
-                float t = 0f;
-                while (t < pause)
-                {
-                    if (myVersion != _missionVersion) yield break;
-                    t += Time.deltaTime;
-                    yield return null;
-                }
-            }
-
-            idx++;
-        }
     }
 
 
     private static float HaversineMeters(Vector2 aLatLon, Vector2 bLatLon)
     {
-        // a=(lat,lon), b=(lat,lon) in degrees
-        const double R = 6371000.0; // Earth radius in m
+        const double R = 6371000.0;
         double lat1 = aLatLon.x * Mathf.Deg2Rad;
         double lat2 = bLatLon.x * Mathf.Deg2Rad;
         double dLat = (bLatLon.x - aLatLon.x) * Mathf.Deg2Rad;
@@ -1082,5 +953,40 @@ public class TargetHUDManager : MonoBehaviour
         return (float)(R * c);
     }
 
+    private OnlineMapsMarker Ensure2DMarkerFor(TargetActor t)
+    {
+        if (t == null) return null;
+
+        // Try to find an existing marker that already carries this actor in its "data"
+        var items = OnlineMapsMarkerManager.instance?.items;
+        if (items != null)
+        {
+            foreach (var m in items)
+            {
+                if (m != null && m["data"] is TargetActor a && a._ID == t._ID)
+                {
+                    // refresh label + coords just in case
+                    m.label = $"Target: {t._Name}";
+                    m.position = new Vector2((float)t._Lon, (float)t._Lat); // (lon,lat)
+                    return m;
+                }
+            }
+        }
+
+        // None found → create one with your icons
+        Texture2D icon = AddTargetOnClick.GetIconForType((TargetType)t._Type);
+        var marker = OnlineMapsMarkerManager.CreateItem(t._Lon, t._Lat, icon);
+        marker.align = OnlineMapsAlign.Center;
+        marker.scale = 0.4f;
+        marker.rotationDegree = 0f;
+        marker.label = $"Target: {t._Name}";
+
+        // so GetMarker() + your other code paths can find it
+        marker["data"] = t;
+        marker["id"] = t._ID;
+
+        OnlineMaps.instance?.Redraw();
+        return marker;
+    }
 
 }

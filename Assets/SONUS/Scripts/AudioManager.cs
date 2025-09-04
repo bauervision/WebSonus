@@ -469,4 +469,15 @@ public class AudioManager : MonoBehaviour
         }
     }
 
+    public void UpdateGuidanceWorld(Vector3 playerPos, Vector3 targetPos, bool arrived)
+    {
+        // Keep the 3D “voice” anchored toward the target continuously.
+        PositionAudioHeading(playerPos, targetPos);
+
+        // Optional: fire an arrival cue if you have one
+        // if (arrived && sonus != null && sonus._straightAhead != null)
+        //     PlaySingle(sonus._straightAhead);
+    }
+
+
 }

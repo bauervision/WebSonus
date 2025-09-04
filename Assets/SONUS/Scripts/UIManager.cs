@@ -130,6 +130,7 @@ public class UIManager : MonoBehaviour
         sceneModeRoot.SetActive(false);
         sceneCanvas.SetActive(false);
         PlayerLocator.instance.liveSyncFromPlayer = false;
+        TargetHUDManager.instance?.SyncAllMarkersToTargetPositions();
 
         PlayerLocator.instance.RestoreUserMarker();
         StartCoroutine(DelayedMarkerSyncToSceneCam());
