@@ -1,6 +1,7 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 public class UIManager : MonoBehaviour
@@ -8,7 +9,8 @@ public class UIManager : MonoBehaviour
     public static UIManager instance;
 
     public GameObject mapCanvas, mapRoot;
-    public GameObject sceneCanvas, sceneModeRoot, HUDcanvas, settingsPanel; // Contains SceneCam + HUD + Compass
+    public GameObject sceneCanvas, sceneModeRoot, HUDcanvas, settingsPanel, sonicStarterPanel, sonicTools; // Contains SceneCam + HUD + Compass
+    public FirstPersonController player;
     public TextMeshProUGUI frequencyText;
     public TargetType SelectedTargetType { get; private set; } = TargetType.STATIONARY;
 
@@ -22,6 +24,8 @@ public class UIManager : MonoBehaviour
 
     [Header("Scene Submode (0=AR, 1=Sonic)")]
     [SerializeField] private int defaultSubmode = 0; // optional: default AR
+
+    public UnityEvent onFound = new();
     private enum SceneSubmode { AR = 0, SONIC = 1 }
     private SceneSubmode submode = SceneSubmode.AR;
     public void SetSonicModeOn() => SetSceneSubmode(1); // OnActive
@@ -47,7 +51,7 @@ public class UIManager : MonoBehaviour
     {
         stationaryButton.onClick.AddListener(() => SetTargetType(TargetType.STATIONARY));
         dynamicButton.onClick.AddListener(() => SetTargetType(TargetType.DYNAMIC));
-
+        sonicStarterPanel.SetActive(false);
         // Visually indicate “no selection yet”
         HighlightSelectedButton();
 
@@ -110,8 +114,13 @@ public class UIManager : MonoBehaviour
 
     }
 
-    public void EnterSceneMode()
+    public void EnterSceneMode(bool isSonicMission = false)
     {
+        sonicStarterPanel.SetActive(isSonicMission);//trigger to display right away if it is
+
+        SetSceneSubmode(isSonicMission ? 1 : 0);
+        sonicTools.SetActive(isSonicMission);
+
         mapCanvas.SetActive(false);
         mapRoot.SetActive(false);
         sceneModeRoot.SetActive(true);
@@ -120,8 +129,39 @@ public class UIManager : MonoBehaviour
         PlayerLocator.instance.EnterSceneMapping();
         // ensure current submode is applied whenever we enter
         ApplySceneSubmode();
+
+        // Enforce cursor visibility from UIManager (safe even if player is not active yet)
+        StartCoroutine(ForceCursorVisibleForFrames(2));
+
+        // When the player is guaranteed active, then set UI mode if needed
+        player?.SetUIMode(true); // this can be your old Toggle/Set; safe when player is enabled
+
     }
 
+    public void ShowSonicCompletionDialog()
+    {
+        onFound.Invoke();
+
+    }
+
+
+
+    private IEnumerator ForceCursorVisibleForFrames(int frames)
+    {
+        for (int i = 0; i < frames; i++)
+        {
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            Cursor.lockState = CursorLockMode.None; // unlock first
+            Cursor.visible = true;
+        }
+    }
+    public void StartSonicHunting()
+    {
+        sonicStarterPanel.SetActive(false);
+
+        MissionLoader.Instance.ActivateMission();
+    }
 
     public void EnterMapMode()
     {

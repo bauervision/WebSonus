@@ -147,7 +147,11 @@ public class TargetHUDManager : MonoBehaviour
 
         switch (index)
         {
-            case 1: LoadMission_SouthSingleDynamic(); break;
+            case 1:
+                {
+                    UIManager.instance.EnterSceneMode(true);//trigger the switch right away
+                    MissionLoader.Instance.SetActiveMission("Sonic_Hunt_Stationary"); break;
+                }
             case 2: LoadMission_WestAndSouthEastDynamics(); break;
             case 3: StartCoroutine(LoadMission_NorthGroupAndSplit()); break;
             case 4: LoadMission_NESW(); break;

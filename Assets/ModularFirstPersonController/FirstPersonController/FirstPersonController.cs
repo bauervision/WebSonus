@@ -463,6 +463,25 @@ public class FirstPersonController : MonoBehaviour
     }
 
 
+
+    public void SetUIMode(bool enable)
+    {
+        if (uiMode != enable) ToggleUIMode();  // reuse your save/restore logic
+        if (enable) StartCoroutine(ForceCursorVisibleForFrames(2));
+    }
+
+    private IEnumerator ForceCursorVisibleForFrames(int frames)
+    {
+        for (int i = 0; i < frames; i++)
+        {
+            yield return null;                    // after Update
+            yield return new WaitForEndOfFrame(); // really end-of-frame
+            Cursor.lockState = CursorLockMode.None; // unlock first
+            Cursor.visible = true;
+        }
+    }
+
+
     public void ToggleUIMode()
     {
         uiMode = !uiMode;
@@ -478,6 +497,7 @@ public class FirstPersonController : MonoBehaviour
             // enter UI mode: unlock cursor, stop camera look, optionally stop movement
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
+
 
             cameraCanMove = false;
             if (freezeMovementInUIMode) playerCanMove = false;

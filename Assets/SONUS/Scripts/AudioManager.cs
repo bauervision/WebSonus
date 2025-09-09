@@ -8,6 +8,7 @@ public class AudioManager : MonoBehaviour
 
     [Header("Config")]
     public SONUS sonus;
+    public GeoMapper geoMapper;
     public Camera sceneCamera;
     public Transform audioHeading;
     public AudioSource voiceSource;
@@ -36,6 +37,120 @@ public class AudioManager : MonoBehaviour
     [SerializeField] private float straightAheadMovementGrace = 0.5f; // allow movement cue shortly after SA
     private float _lastStraightAheadPlayTime = -999f;
 
+
+    [Header("Directional Counsel")]
+    [SerializeField] private bool counselEnabled = true;
+    [SerializeField] private float counselCooldown = 4f;   // min seconds between any counsel
+    [SerializeField] private float maintainCooldown = 6f;  // min seconds between “maintain heading”
+    [SerializeField] private float maintainBandMax = 5f;   // ≤ this is “looking good”
+    [SerializeField] private float driftBandMin = 6f;      // start of drift band
+    [SerializeField] private float driftBandMax = 25f;     // up to this still “small drift” (beyond: handled by other cues)
+    [SerializeField] private bool driftRequiresMaintain = true; // only drift after a maintain cue
+    [SerializeField] private float driftAfterLockWindow = 5f;   // seconds after last corridor lock we allow drift counsel
+    [SerializeField] private float backOnTrackCooldown = 4f;    // min gap between "back on track" calls
+    [SerializeField] private float minLockForMaintain = 1.25f; // seconds aligned before we allow "maintain"
+    [SerializeField] private float maintainAfterSA = 3.0f;     // seconds after StraightAhead before "maintain" allowed
+    [SerializeField] private float maintainMinDistance = 20f;  // meters; 0 to disable
+    private float _lastCounselTime = -999f;
+    private float _lastMaintainTime = -999f;
+    private bool _maintainPlayedThisLock = false; // set when we speak maintain while locked
+    private bool _driftActive = false;            // we’re in a drift episode since last maintain
+    private int _driftSide = 0;                  // -1 left, +1 right
+    private float _lastBackOnTrackTime = -999f;
+
+
+    public void PlayArrival(TargetActor actor)
+    {
+        if (sonus == null || voiceSource == null) return;
+
+        AudioClip clip = null;
+        // Prefer type-specific, fall back to generic
+        if (actor != null && sonus.arrival != null)
+        {
+            var t = (TargetType)actor._Type;
+            if (t == TargetType.STATIONARY) clip = PickRandom(sonus.arrival.stationary);
+            else if (t == TargetType.DYNAMIC) clip = PickRandom(sonus.arrival.dynamic);
+            if (clip == null) clip = PickRandom(sonus.arrival.generic);
+        }
+
+        if (clip == null) return;
+
+        // Position voice at target direction if we can
+        var cam = sceneCamera ?? Camera.main;
+        if (cam != null && actor != null)
+        {
+            Vector3 player = cam.transform.position;
+            Vector3 target = geoMapper != null
+                ? geoMapper.LatLonToWorld(actor._Lat, actor._Lon, player.y)
+                : GeoUtils.GeoToWorld(new Vector2((float)actor._Lat, (float)actor._Lon));
+            target.y = player.y;
+            PositionAudioHeading(player, target);
+        }
+
+        PlaySingle(clip);   // uses your existing single-clip play (stops current, plays new)
+        BumpInterval();     // optional: reset periodic timer so we don’t layer cues
+    }
+
+    private void PlayBackOnTrack(Vector3 player, Vector3 target)
+    {
+        // Prefer explicit backOnTrack bucket, else reuse maintain
+        AudioClip clip = null;
+        if (sonus?.counsel != null)
+        {
+            if (clip == null)
+                clip = PickRandom(sonus.counsel.maintain);
+        }
+        if (clip == null) return;
+
+        PositionAudioHeading(player, target);
+        PlaySingle(clip);
+        _lastCounselTime = Time.time;
+        _lastMaintainTime = Time.time; // treat as a maintain reset
+        _lastBackOnTrackTime = Time.time;
+        BumpInterval();
+    }
+
+
+    private AudioClip PickRandom(AudioClip[] arr)
+    {
+        if (arr == null || arr.Length == 0) return null;
+        int i = Random.Range(0, arr.Length);
+        return arr[i];
+    }
+
+    private void PlayCounselMaintain(Vector3 player, Vector3 target)
+    {
+        if (sonus?.counsel == null) return;
+        var clip = PickRandom(sonus.counsel.maintain);
+        if (clip == null) return;
+        PositionAudioHeading(player, target);
+        PlaySingle(clip);
+        _lastCounselTime = Time.time;
+        _lastMaintainTime = Time.time;
+        BumpInterval();
+    }
+
+    private void PlayCounselLeft(Vector3 player, Vector3 target)
+    {
+        if (sonus?.counsel == null) return;
+        var clip = PickRandom(sonus.counsel.driftLeft);
+        if (clip == null) return;
+        PositionAudioHeading(player, target);
+        PlaySingle(clip);
+        _lastCounselTime = Time.time;
+        BumpInterval();
+    }
+
+    private void PlayCounselRight(Vector3 player, Vector3 target)
+    {
+        if (sonus?.counsel == null) return;
+        var clip = PickRandom(sonus.counsel.driftRight);
+        if (clip == null) return;
+        PositionAudioHeading(player, target);
+        PlaySingle(clip);
+        _lastCounselTime = Time.time;
+        BumpInterval();
+    }
 
 
     // --- Add with the other Movement-cue tuning fields ---
@@ -137,7 +252,9 @@ public class AudioManager : MonoBehaviour
 
             // Positions
             Vector3 player = sceneCamera.transform.position;
-            Vector3 target = GeoUtils.GeoToWorld(new Vector2((float)active._Lat, (float)active._Lon));
+            Vector3 target = geoMapper != null
+                ? geoMapper.LatLonToWorld(active._Lat, active._Lon, player.y)
+                : GeoUtils.GeoToWorld(new Vector2((float)active._Lat, (float)active._Lon));
             target.y = player.y;
 
             // Too close? (skip cues)
@@ -159,19 +276,29 @@ public class AudioManager : MonoBehaviour
                 continue;
             }
 
-            float camYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg; // 0°=N, 90°=E
+            float camYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
             float tarYaw = Mathf.Atan2(toT.x, toT.z) * Mathf.Rad2Deg;
-            float relAngle = Mathf.DeltaAngle(camYaw, tarYaw);          // -180..+180
+            float relAngle = Mathf.DeltaAngle(camYaw, tarYaw); // -180..+180
             float absRel = Mathf.Abs(relAngle);
             float now = Time.time;
 
-            // Corridor membership
             bool inCorridor = absRel <= lockCorridorDeg;
+            bool inMaintainBand = absRel <= maintainBandMax;
+
             if (inCorridor)
             {
                 _lockTimer += sampleInterval;
                 _lastLockTime = now;
                 _leftCorridorAt = -999f;
+
+                // If we were drifting and re-aligned into the maintain band → "back on track"
+                if (_driftActive && inMaintainBand && (now - _lastBackOnTrackTime) >= backOnTrackCooldown)
+                {
+                    PlayBackOnTrack(player, target);
+                    _driftActive = false;
+                    _driftSide = 0;
+                    if (debugMovementCues) Debug.Log("[MC] Counsel: BACK ON TRACK");
+                }
 
                 // Instant "Straight Ahead" (anti-spam + re-arm)
                 if (_straightAheadArmed && absRel <= straightAheadDeg && (now - _lastStraightAheadTime) >= straightAheadCooldown)
@@ -181,18 +308,63 @@ public class AudioManager : MonoBehaviour
                         PositionAudioHeading(player, target);
                         PlaySingle(sonus._straightAhead);
                         _lastStraightAheadTime = now;
-                        _lastStraightAheadPlayTime = now; // track SA time ONLY
+                        _lastStraightAheadPlayTime = now;   // for movement-cue grace
                         _straightAheadArmed = false;
                         BumpInterval();
                         if (debugMovementCues) Debug.Log($"[MC] StraightAhead PLAY (absRel={absRel:F1}°)");
                     }
                 }
+                else
+                {
+                    // --- Directional counsel: maintain / drift left-right ---
+                    if (counselEnabled && (now - _lastCounselTime) >= counselCooldown)
+                    {
+                        // Maintain: only when stably aligned, spaced out, and not right after SA
+                        if (absRel <= maintainBandMax
+    && (now - _lastMaintainTime) >= maintainCooldown
+    && _lockTimer >= minLockForMaintain
+    && (now - _lastStraightAheadPlayTime) >= maintainAfterSA
+    && (maintainMinDistance <= 0f || distance >= maintainMinDistance))
+                        {
+                            PlayCounselMaintain(player, target);
+                            _maintainPlayedThisLock = true;   // unlocks drift cues later
+                            if (debugMovementCues) Debug.Log("[MC] Counsel: MAINTAIN");
+                        }
+
+                        // Drift: only AFTER we've given a maintain while locked, and within drift band
+                        else if (!inMaintainBand
+                                 && absRel >= driftBandMin && absRel <= driftBandMax)
+                        {
+                            bool recentlyLocked = (now - _lastLockTime) <= driftAfterLockWindow;
+                            bool allowed = recentlyLocked && (!driftRequiresMaintain || _maintainPlayedThisLock);
+                            if (allowed)
+                            {
+                                float sideY = Mathf.Sign(Vector3.Cross(fwd, toT).y); // +left / -right
+                                if (sideY > 0f)
+                                {
+                                    PlayCounselLeft(player, target);
+                                    _driftActive = true; _driftSide = -1;
+                                    if (debugMovementCues) Debug.Log($"[MC] Counsel: DRIFT LEFT (absRel={absRel:F1}°)");
+                                }
+                                else if (sideY < 0f)
+                                {
+                                    PlayCounselRight(player, target);
+                                    _driftActive = true; _driftSide = +1;
+                                    if (debugMovementCues) Debug.Log($"[MC] Counsel: DRIFT RIGHT (absRel={absRel:F1}°)");
+                                }
+                            }
+                        }
+                    }
+                }
             }
             else
             {
+                // Left corridor: reset per-lock state; drift can only happen after next maintain
+                if (_wasLockedLastTick) _maintainPlayedThisLock = false;
+
                 _lockTimer = 0f;
 
-                // Start/track time since we left the corridor
+                // Track corridor exit for re-arm timing
                 if (_leftCorridorAt < 0f) _leftCorridorAt = now;
 
                 // Re-arm straight-ahead ONLY after time and angle thresholds
@@ -215,11 +387,7 @@ public class AudioManager : MonoBehaviour
             }
 
             float dt = now - (float)_lastSampleTime;
-            if (dt <= 0f)
-            {
-                if (debugMovementCues) Debug.Log("[MC] dt<=0");
-                continue;
-            }
+            if (dt <= 0f) { if (debugMovementCues) Debug.Log("[MC] dt<=0"); continue; }
 
             Vector3 delta = target - _lastTargetWorld; delta.y = 0f;
             float disp = delta.magnitude;
@@ -229,20 +397,19 @@ public class AudioManager : MonoBehaviour
             _lastTargetWorld = target;
             _lastSampleTime = now;
 
-            // Speed-only gate (distance per sample is tiny at 5 Hz)
+            // Speed-only gate
             if (speed < minMoveSpeed)
             {
-
                 if (debugMovementCues) Debug.Log($"[MC] Too slow: {speed:F2} < {minMoveSpeed:F2}");
                 continue;
             }
 
             // Movement cue on EXIT (if we were recently aligned)
-            bool recentlyLocked = (now - _lastLockTime) <= recentLockGrace;
+            bool recentlyLockedForMove = (now - _lastLockTime) <= recentLockGrace;
+            bool canPlayMovement = (now - _lastMoveCueTime) >= movementCueCooldown
+                                   || (now - _lastStraightAheadPlayTime) >= straightAheadMovementGrace;
 
-            bool canPlayMovement = (now - _lastMoveCueTime) >= movementCueCooldown || (now - _lastStraightAheadPlayTime) >= straightAheadMovementGrace;
-
-            if (justExitedCorridor && recentlyLocked && canPlayMovement)
+            if (justExitedCorridor && recentlyLockedForMove && canPlayMovement)
             {
                 if (delta.sqrMagnitude > 1e-4f)
                 {
@@ -253,34 +420,17 @@ public class AudioManager : MonoBehaviour
                     BumpInterval();
                     if (debugMovementCues) Debug.Log($"[MC] Moving cue on EXIT: {d8} (absRel={absRel:F1}°)");
                 }
-
-            }
-            else
-            {
-                // (Optional backup: persistence-based off-course cue)
-                // bool offCourse = (absRel >= offCourseDeg) && recentlyLocked;
-                // if (offCourse) _offTimer += sampleInterval; else _offTimer = 0f;
-                // if (_offTimer >= offCoursePersistTime && (now - _lastMoveCueTime) >= movementCueCooldown)
-                // {
-                //     if (delta.sqrMagnitude > 1e-4f)
-                //     {
-                //         float moveYaw = Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg;
-                //         var d8 = BearingToDir8((moveYaw + 360f) % 360f);
-                //         PlayTargetMoving(d8, player, target);
-                //         _lastMoveCueTime = now;
-                //         if (debugMovementCues) Debug.Log($"[MC] Moving cue PERSIST: {d8}");
-                //     }
-                //     _offTimer = 0f;
-                // }
             }
 
             if (debugMovementCues)
             {
-                Debug.Log($"[MC] rel={absRel:F1}°, speed={speed:F2}, lock={_lockTimer:F2}, armed={_straightAheadArmed}, " +
-                          $"recent={recentlyLocked}, exited={justExitedCorridor}, cool={(now - _lastMoveCueTime):F1}");
+                Debug.Log($"[MC] rel={absRel:F1}°, dist={distance:F1}m, lock={_lockTimer:F2}, " +
+                          $"maintained={_maintainPlayedThisLock}, driftActive={_driftActive}, exited={justExitedCorridor}");
             }
         }
     }
+
+
 
 
 
@@ -292,6 +442,11 @@ public class AudioManager : MonoBehaviour
         _wasLockedLastTick = false;
         _straightAheadArmed = true;
         _leftCorridorAt = -999f;
+
+        _maintainPlayedThisLock = false;
+        _driftActive = false;
+        _driftSide = 0;
+
     }
 
     // === Existing methods below (plus a tiny helper) ===
@@ -342,8 +497,9 @@ public class AudioManager : MonoBehaviour
         }
 
         Vector3 playerPos = sceneCamera != null ? sceneCamera.transform.position : Vector3.zero;
-        Vector3 targetPos = GeoUtils.GeoToWorld(new Vector2((float)active._Lat, (float)active._Lon));
-        targetPos.y = playerPos.y;
+        Vector3 targetPos = geoMapper != null
+    ? geoMapper.LatLonToWorld(active._Lat, active._Lon, playerPos.y)
+    : GeoUtils.GeoToWorld(new Vector2((float)active._Lat, (float)active._Lon));
 
         float distance = Vector3.Distance(playerPos, targetPos);
         float relativeAngle = ComputeRelativeAngleDeg(playerPos, targetPos);

@@ -46,6 +46,23 @@ namespace Octo.Surge.Sonus
 
     }
 
+    [System.Serializable]
+    public class DirectionalCounselClips
+    {
+        public AudioClip[] maintain;   // “straight ahead”, “maintain this heading”, ...
+        public AudioClip[] driftLeft;  // “drifting left”, “head back to the right”, ...
+        public AudioClip[] driftRight; // “drifting right”, “head back to the left”, ...
+    }
+
+    [System.Serializable]
+    public class ArrivalClips
+    {
+        public AudioClip[] generic;   // used if specific set empty
+        public AudioClip[] stationary;
+        public AudioClip[] dynamic;
+    }
+
+
 
     [System.Serializable]
     public class SONUS
@@ -57,6 +74,8 @@ namespace Octo.Surge.Sonus
         public AudioClip _newStationary, _newDynamic;
         public AudioClip _noTargets;
         public AudioClip _north1;
+        public DirectionalCounselClips counsel;
+        public ArrivalClips arrival;
 
     }
 
