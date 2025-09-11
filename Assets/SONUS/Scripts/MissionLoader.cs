@@ -1,214 +1,307 @@
-// MissionLoader.cs
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+[Serializable]
+public class Mission
+{
+    public string name;
+    [Tooltip("Anchors that belong to this mission, in the order you want them encountered.")]
+    public List<MissionAnchor> anchors = new();
+
+    [Header("Flow")]
+    public bool randomizeFirst = true;     // optional
+    public bool selectRandomOnTryAnother = true;
+}
+
 public class MissionLoader : MonoBehaviour
 {
     public static MissionLoader Instance { get; private set; }
-    public string activeMission;
+
+    [Header("Configure in Inspector")]
+    public List<Mission> missions = new();
+
+    [Header("Runtime")]
+    [SerializeField] private int activeMissionIndex = -1;
+    [SerializeField] private MissionAnchor _activeAnchor; // which anchor in the active mission is currently "selected"
 
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+
+        SyncAnchorMissionFields();
+
     }
 
-    public void SetActiveMission(string name) => activeMission = name;
-
-    public void ActivateMission()
+#if UNITY_EDITOR
+    void OnValidate()
     {
-        // IMPORTANT: include inactive so we can enable placed anchors
-        var anchors = FindObjectsByType<MissionAnchor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        if (!Application.isPlaying)
+            SyncAnchorMissionFields();
+    }
+#endif
 
-        // Disable all
-        foreach (var a in anchors)
-            if (a.targetObject) a.targetObject.SetActive(false);
+    public Mission ActiveMission => (activeMissionIndex >= 0 && activeMissionIndex < missions.Count) ? missions[activeMissionIndex] : null;
+    public string ActiveMissionName => ActiveMission?.name ?? "";
 
-        bool setActiveOnce = false;
+    // ---------- Public API ----------
+    // --- Add this helper to ensure the scene is neutral while waiting to start ---
+    void DeactivateAllAnchorsAcrossAllMissions()
+    {
+        foreach (var mission in missions)
+            foreach (var a in mission.anchors)
+                ToggleAnchorObject(a, false);
+    }
 
-        // Enable selected + wire behavior
-        foreach (var a in anchors)
+    // --- NEW: stage-only APIs (do NOT activate) ---
+    public void SelectMissionByName(string missionName)
+    {
+        int idx = missions.FindIndex(m => string.Equals(m.name, missionName, StringComparison.Ordinal));
+        if (idx < 0) { Debug.LogWarning($"[MissionLoader] Mission not found: {missionName}"); return; }
+        SelectMissionByIndex(idx);
+    }
+
+    public void SelectMissionByIndex(int index)
+    {
+        if (index < 0 || index >= missions.Count) { Debug.LogWarning("[MissionLoader] Bad mission index"); return; }
+        EndMission();                                // clean up any previous run
+        activeMissionIndex = index;                  // stage the mission
+        DeactivateAllAnchorsAcrossAllMissions();     // keep scene quiet until Start
+        _activeAnchor = null;
+        // (Optional) notify UI: we're staged and waiting to start
+        var thm = FindFirstObjectByType<TargetHUDManager>();
+        if (thm) thm.SendMessage("PrepareMissionUI", SendMessageOptions.DontRequireReceiver);
+    }
+
+    // --- Bring back public ActivateMission() that starts the staged mission ---
+    public void ActivateMission() => ActivateMissionInternal();
+
+    // --- Keep these as convenience (stage + start) ---
+    public void LoadMissionByName(string missionName) { SelectMissionByName(missionName); }
+
+    public void LoadMissionByIndex(int index)
+    {
+        SelectMissionByIndex(index);
+
+    }
+
+    /// <summary>
+    /// UI: Try another target within the current mission.
+    /// Uses the mission's selectRandomOnTryAnother setting (or true if unset).
+    /// </summary>
+    public void UI_TryAnotherAndResume()
+    {
+        bool ok = SelectAnotherTargetInMission(true);
+        if (!ok) { Debug.Log("[MissionLoader] UI_TryAnotherAndResume: no candidates."); return; }
+
+        var fpc = FindFirstObjectByType<FirstPersonController>();
+        fpc.SetUIMode(false);
+        // Optional: kick guidance back on if you gate it via UI mode
+        // AudioManager.Instance?.StartSonicForActiveTarget(); // if you have this
+    }
+
+    // End mission from the dialog and exit UI mode.
+    public void UI_EndMission()
+    {
+        EndMission();
+        var fpc = FindFirstObjectByType<FirstPersonController>();
+        fpc.SetUIMode(false);
+        UIManager.instance.EnterMapMode();
+    }
+
+    /// <summary>Choose another target within the current mission (excludes current anchor).</summary>
+    public bool SelectAnotherTargetInMission(bool randomize = true)
+    {
+        var m = ActiveMission;
+        if (m == null) { Debug.LogWarning("[MissionLoader] No active mission."); return false; }
+
+        // Build candidate list from configured anchors
+        var candidates = new List<MissionAnchor>();
+        foreach (var a in m.anchors)
+            if (a && a.gameObject.activeInHierarchy && a != _activeAnchor)
+                candidates.Add(a);
+
+        if (candidates.Count == 0)
         {
-            if (a.missionId != activeMission) continue;
-            var go = a.targetObject ? a.targetObject : a.gameObject;
+            Debug.Log("[MissionLoader] No remaining anchors to select.");
+            return false;
+        }
 
-            go.SetActive(true);
-            if (!string.IsNullOrEmpty(a.targetName)) go.name = a.targetName;
+        var next = randomize ? candidates[UnityEngine.Random.Range(0, candidates.Count)] : candidates[0];
+        return SetActiveAnchor(next, playStinger: true);
+    }
 
-            // Prefer TargetProxy → actor
-            // Sync world → actor lat/lon so AudioManager distances are correct
-            var proxy = go.GetComponent<TargetProxy>();
-            var mapper = PlayerLocator.instance?.mapper ?? FindFirstObjectByType<GeoMapper>();
-            if (proxy != null && proxy.actor != null && mapper != null)
+    /// <summary>Convenience for your dialog button: swap to an entirely different mission by name.</summary>
+    public void TryAnotherMission(string missionName)
+    {
+        LoadMissionByName(missionName);
+    }
+
+    public void EndMission()
+    {
+        // Stop any movers
+        var movers = FindObjectsByType<SimpleRouteMover>(FindObjectsSortMode.None);
+        foreach (var m in movers) m.StopMoving();
+
+        // Deactivate all anchors in the active mission
+        if (ActiveMission != null)
+        {
+            foreach (var a in ActiveMission.anchors)
+                ToggleAnchorObject(a, false);
+        }
+
+        _activeAnchor = null;
+        ActiveTargetManager.Instance?.SetActiveTarget(null);
+    }
+
+    // ---------- Internals ----------
+
+    // Keep mission anchors' missionId/Name in sync with MissionLoader.missions
+    public void SyncAnchorMissionFields()
+    {
+        var seen = new HashSet<MissionAnchor>();
+
+        // Stamp anchors that are referenced by missions
+        foreach (var m in missions)
+        {
+            if (m == null) continue;
+            foreach (var a in m.anchors)
             {
-                var (lat, lon) = mapper.WorldToLatLon(go.transform.position);
-                proxy.actor._Lat = lat;
-                proxy.actor._Lon = lon;
+                if (!a) continue;
 
-                // Register every actor, but only set active/play stinger once
-                ActiveTargetManager.Instance.Register(proxy.actor);
-                if (!setActiveOnce)
-                {
-                    ActiveTargetManager.Instance.SetActiveTarget(proxy.actor);
-                    AudioManager.Instance?.PlayNewTargetClip(proxy.actor);
-                    setActiveOnce = true;
-                }
+                if (seen.Contains(a))
+                    Debug.LogWarning($"[MissionLoader] Anchor '{a.name}' is referenced by multiple missions; last assignment wins.");
+
+                a.AssignMissionMeta(m.name);
+                seen.Add(a);
             }
+        }
 
-            // Start route if dynamic
+#if UNITY_EDITOR
+        // In editor, clear stale labels on anchors that are no longer in any mission list
+        var all = FindObjectsByType<MissionAnchor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (var a in all)
+            if (a && !seen.Contains(a))
+                a.AssignMissionMeta(null);
+#endif
+    }
+
+    void ActivateMissionInternal()
+    {
+        var m = ActiveMission;
+        if (m == null) return;
+
+        // First, disable EVERY anchor object across all missions to guarantee a clean slate
+        foreach (var mission in missions)
+            foreach (var a in mission.anchors)
+                ToggleAnchorObject(a, false);
+
+        // Enable only this mission’s anchors + wire proxies/movers
+        foreach (var a in m.anchors)
+        {
+            if (!a) continue;
+
+            var go = a.targetObject ? a.targetObject : a.gameObject;
+            go.SetActive(true);
+
+            if (!string.IsNullOrEmpty(a.name)) go.name = a.name;
+
+            // Route movers for Dynamics
             if (a.targetType == MissionTargetType.Dynamic && a.routePoints != null && a.routePoints.Count >= 2)
             {
                 var mover = go.GetComponent<SimpleRouteMover>() ?? go.AddComponent<SimpleRouteMover>();
                 mover.Configure(a.routePoints, a.moveSpeed, a.dwellSeconds, a.loop);
                 mover.Begin();
             }
+
+            // Keep TargetProxy actor lat/lon in sync up-front (Audio distances)
+            var proxy = go.GetComponent<TargetProxy>();
+            var mapper = PlayerLocator.instance?.mapper ?? FindFirstObjectByType<GeoMapper>();
+            if (proxy && proxy.actor != null && mapper != null)
+            {
+                var (lat, lon) = mapper.WorldToLatLon(go.transform.position);
+                proxy.actor._Lat = lat;
+                proxy.actor._Lon = lon;
+                ActiveTargetManager.Instance?.Register(proxy.actor);
+            }
         }
 
-        // If you use a finalizer:
+        // Pick the first active target for this mission
+        MissionAnchor first = null;
+        var activeList = m.anchors.FindAll(a => a && (a.targetObject ? a.targetObject.activeInHierarchy : a.gameObject.activeInHierarchy));
+        if (activeList.Count > 0)
+        {
+            first = m.randomizeFirst ? activeList[UnityEngine.Random.Range(0, activeList.Count)] : activeList[0];
+        }
+
+        if (first != null)
+        {
+            SetActiveAnchor(first, playStinger: true);
+        }
+
+        // Finalize any HUD
         var thm = FindFirstObjectByType<TargetHUDManager>();
         if (thm) thm.SendMessage("FinalizeMissionUI", SendMessageOptions.DontRequireReceiver);
     }
 
-    public void EndMission()
+    bool SetActiveAnchor(MissionAnchor anchor, bool playStinger)
     {
-        // Stop movers (they survive SetActive otherwise)
-        var movers = FindObjectsByType<SimpleRouteMover>(FindObjectsSortMode.None);
-        foreach (var m in movers) m.StopMoving();
-        // Optional: disable anchors for activeMission if desired.
-    }
+        if (!anchor) return false;
 
-    // -------- New overloads so you can call with no params --------
+        var go = anchor.targetObject ? anchor.targetObject : anchor.gameObject;
+        if (!go.activeSelf) go.SetActive(true);
 
-    public void SelectAnotherTarget() { SelectAnotherTargetInMission(); }
+        // ensure next anchor can trigger arrival later
+        anchor.GetComponent<MissionAnchor>().ResetArrivalGate();
 
-    /// <summary>
-    /// Pick another target within the current active mission, excluding the currently active anchor if we can find it.
-    /// </summary>
-    public bool SelectAnotherTargetInMission()
-    {
-        if (string.IsNullOrEmpty(activeMission))
-        {
-            Debug.LogWarning("[MissionLoader] No activeMission set.");
-            return false;
-        }
+        var proxy = go.GetComponent<TargetProxy>();
+        if (proxy == null || proxy.actor == null) return false;
 
-        // Try to infer the currently-active anchor to exclude
-        var exclude = FindAnchorForActiveActor();
-        return SelectAnotherTargetInMission(activeMission, exclude, true);
-    }
+        _activeAnchor = anchor;
 
-    /// <summary>
-    /// Same as above, but lets you pass randomize.
-    /// </summary>
-    public bool SelectAnotherTargetInMission(bool randomize)
-    {
-        if (string.IsNullOrEmpty(activeMission))
-        {
-            Debug.LogWarning("[MissionLoader] No activeMission set.");
-            return false;
-        }
-
-        var exclude = FindAnchorForActiveActor();
-        return SelectAnotherTargetInMission(activeMission, exclude, randomize);
-    }
-
-    /// <summary>
-    /// Helper to infer which MissionAnchor corresponds to the currently active target.
-    /// </summary>
-    private MissionAnchor FindAnchorForActiveActor()
-    {
-        var active = ActiveTargetManager.Instance?.ActiveTarget;
-        if (active == null) return null;
-
-        var anchors = FindObjectsByType<MissionAnchor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        foreach (var a in anchors)
-        {
-            var go = a.targetObject ? a.targetObject : a.gameObject;
-            var proxy = go.GetComponent<TargetProxy>();
-            if (proxy != null && proxy.actor == active) return a;
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Original selector (now used by the overloads).
-    /// Chooses another enabled anchor in the same mission (excluding one if provided), sets it active, and plays the new target stinger.
-    /// </summary>
-    public bool SelectAnotherTargetInMission(string missionId, MissionAnchor exclude, bool randomize = true)
-    {
-        // Gather candidates (active objects only)
-        var anchors = FindObjectsByType<MissionAnchor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        var candidates = new List<MissionAnchor>();
-
-        foreach (var a in anchors)
-        {
-            if (a == null) continue;
-            if (a.missionId != missionId) continue;
-            if (a == exclude) continue;
-
-            var go = a.targetObject ? a.targetObject : a.gameObject;
-            if (!go.activeInHierarchy) continue;
-
-            var proxy = go.GetComponent<TargetProxy>();
-            if (proxy == null || proxy.actor == null) continue;
-
-            candidates.Add(a);
-        }
-
-        if (candidates.Count == 0)
-        {
-            Debug.Log("[MissionLoader] No remaining targets in this mission.");
-            return false;
-        }
-
-        var next = randomize ? candidates[Random.Range(0, candidates.Count)] : candidates[0];
-        var nextGO = next.targetObject ? next.targetObject : next.gameObject;
-        var nextProxy = nextGO.GetComponent<TargetProxy>();
-        if (nextProxy == null || nextProxy.actor == null) return false;
-
-        // Ensure enabled (belt-and-suspenders)
-        if (!nextGO.activeSelf) nextGO.SetActive(true);
-
-        // Make it the active target
-        ActiveTargetManager.Instance.Register(nextProxy.actor);
-        ActiveTargetManager.Instance.SetActiveTarget(nextProxy.actor);
-
-        // Optional: play your "new target" stinger
-        AudioManager.Instance?.PlayNewTargetClip(nextProxy.actor);
+        ActiveTargetManager.Instance?.Register(proxy.actor);
+        ActiveTargetManager.Instance?.SetActiveTarget(proxy.actor);
+        if (playStinger) AudioManager.Instance?.PlayNewTargetClip(proxy.actor);
 
         return true;
     }
-}
 
-// (unchanged)
-public class SimpleRouteMover : MonoBehaviour
-{
-    List<Transform> _points; float _speed; float _dwell; bool _loop; Coroutine _co;
-
-    public void Configure(List<Transform> pts, float speed, float dwell, bool loop)
-    { _points = pts; _speed = Mathf.Max(0.01f, speed); _dwell = Mathf.Max(0f, dwell); _loop = loop; }
-
-    public void Begin() { if (_co != null) StopCoroutine(_co); if (_points == null || _points.Count < 2) return; _co = StartCoroutine(Run()); }
-    public void StopMoving() { if (_co != null) StopCoroutine(_co); _co = null; }
-
-    IEnumerator Run()
+    static void ToggleAnchorObject(MissionAnchor a, bool on)
     {
-        int i = 0;
-        while (true)
-        {
-            var a = _points[i].position;
-            var b = _points[(i + 1) % _points.Count].position;
-
-            while ((transform.position - b).sqrMagnitude > 0.05f)
-            {
-                transform.position = Vector3.MoveTowards(transform.position, b, _speed * Time.deltaTime);
-                yield return null;
-            }
-
-            if (_dwell > 0f) yield return new WaitForSeconds(_dwell);
-            i++;
-            if (i >= _points.Count - 1) { if (_loop) i = 0; else yield break; }
-        }
+        if (!a) return;
+        var go = a.targetObject ? a.targetObject : a.gameObject;
+        if (go && go.activeSelf != on) go.SetActive(on);
     }
+
+    // ---------- Editor helpers (optional) ----------
+#if UNITY_EDITOR
+    [ContextMenu("Build Missions From Scene (group by MissionAnchor.missionId)")]
+    void BuildMissionsFromScene()
+    {
+        var all = FindObjectsByType<MissionAnchor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        var byId = new Dictionary<string, List<MissionAnchor>>();
+        foreach (var a in all)
+        {
+            var key = string.IsNullOrEmpty(a.missionId) ? "Unnamed" : a.missionId;
+            if (!byId.TryGetValue(key, out var list)) { list = new List<MissionAnchor>(); byId[key] = list; }
+            list.Add(a);
+        }
+
+        missions.Clear();
+        foreach (var kv in byId)
+            missions.Add(new Mission { name = kv.Key, anchors = kv.Value });
+
+        // NEW: refresh anchor labels immediately
+        SyncAnchorMissionFields();
+
+        Debug.Log($"[MissionLoader] Built {missions.Count} mission(s) from scene anchors.");
+        UnityEditor.EditorUtility.SetDirty(this);
+    }
+#endif
+
+
 }
+
+

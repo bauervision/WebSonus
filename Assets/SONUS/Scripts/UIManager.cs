@@ -138,11 +138,7 @@ public class UIManager : MonoBehaviour
 
     }
 
-    public void ShowSonicCompletionDialog()
-    {
-        onFound.Invoke();
-
-    }
+    public void ShowSonicCompletionDialog() { onFound.Invoke(); }
 
 
 
@@ -156,10 +152,10 @@ public class UIManager : MonoBehaviour
             Cursor.visible = true;
         }
     }
+
     public void StartSonicHunting()
     {
         sonicStarterPanel.SetActive(false);
-
         MissionLoader.Instance.ActivateMission();
     }
 

@@ -7,9 +7,20 @@ public enum MissionTargetType { Stationary, Dynamic }
 
 public class MissionAnchor : MonoBehaviour
 {
-    [Header("Mission linkage")]
-    public string missionId = "Sonic_Hunt_Stationary";
-    public string targetName = "Hidden Target";
+    [Header("Mission linkage (auto)")]
+    [Tooltip("Auto-set from MissionLoader.missions; do not edit.")]
+    public string missionName = "";     // e.g., "Sonic_Hunt_Stationary"
+
+    [Tooltip("Auto-set from MissionLoader.missions; mirrors missionName unless you later add explicit slugs.")]
+    public string missionId = "";       // kept for backwards-compat
+
+    /// <summary>Called by MissionLoader to stamp this anchor with its owning mission metadata.</summary>
+    public void AssignMissionMeta(string nameOrNull)
+    {
+        missionName = nameOrNull ?? "";
+        missionId = missionName; // mirror for now (you can switch to a slug later)
+    }
+
     public MissionTargetType targetType = MissionTargetType.Stationary;
 
     [Tooltip("Object toggled when mission activates (defaults to this).")]
@@ -26,15 +37,20 @@ public class MissionAnchor : MonoBehaviour
     [Tooltip("Meters")] public float endDistanceMeters = 8f;
 
     private Coroutine _proximityCo;
+    private bool _arrivalFired;
 
     void OnEnable()
     {
+        _arrivalFired = false;
         if (endOnProximity) _proximityCo = StartCoroutine(CoProximityWatch());
     }
     void OnDisable()
     {
         if (_proximityCo != null) { StopCoroutine(_proximityCo); _proximityCo = null; }
     }
+
+    // Optional helper if you ever want to manually clear it:
+    public void ResetArrivalGate() => _arrivalFired = false;
 
     IEnumerator CoProximityWatch()
     {
@@ -60,8 +76,9 @@ public class MissionAnchor : MonoBehaviour
 
 
 
-            if (meters <= endDistanceMeters)
+            if (meters <= endDistanceMeters && !_arrivalFired)
             {
+                _arrivalFired = true;
                 var goActor = targetObject ? targetObject : gameObject;
                 var proxy = goActor.GetComponent<TargetProxy>();
                 var actor = proxy != null ? proxy.actor : null;
@@ -75,7 +92,6 @@ public class MissionAnchor : MonoBehaviour
                 var fpc = FindFirstObjectByType<FirstPersonController>();
                 fpc.SetUIMode(true);
 
-                MissionLoader.Instance.EndMission();
                 UIManager.instance.ShowSonicCompletionDialog();
             }
             yield return new WaitForSeconds(0.15f);
