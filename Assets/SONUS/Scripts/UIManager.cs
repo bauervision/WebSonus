@@ -9,7 +9,7 @@ public class UIManager : MonoBehaviour
     public static UIManager instance;
 
     public GameObject mapCanvas, mapRoot;
-    public GameObject sceneCanvas, sceneModeRoot, HUDcanvas, settingsPanel, sonicStarterPanel, sonicTools; // Contains SceneCam + HUD + Compass
+    public GameObject sceneCanvas, sceneModeRoot, HUDcanvas, settingsPanel, sonicStarterPanel, sonicTools, endMissionUI; // Contains SceneCam + HUD + Compass
     public FirstPersonController player;
     public TextMeshProUGUI frequencyText;
     public TargetType SelectedTargetType { get; private set; } = TargetType.STATIONARY;
@@ -140,7 +140,7 @@ public class UIManager : MonoBehaviour
 
     public void ShowSonicCompletionDialog() { onFound.Invoke(); }
 
-
+    public void ShowMissionCompleteDialog() { endMissionUI.SetActive(true); }
 
     private IEnumerator ForceCursorVisibleForFrames(int frames)
     {
