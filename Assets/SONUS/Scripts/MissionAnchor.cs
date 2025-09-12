@@ -49,6 +49,9 @@ public class MissionAnchor : MonoBehaviour
         if (_proximityCo != null) { StopCoroutine(_proximityCo); _proximityCo = null; }
     }
 
+
+
+
     // Optional helper if you ever want to manually clear it:
     public void ResetArrivalGate() => _arrivalFired = false;
 
@@ -79,21 +82,28 @@ public class MissionAnchor : MonoBehaviour
             if (meters <= endDistanceMeters && !_arrivalFired)
             {
                 _arrivalFired = true;
+
+                // Optional arrival VO
                 var goActor = targetObject ? targetObject : gameObject;
                 var proxy = goActor.GetComponent<TargetProxy>();
                 var actor = proxy != null ? proxy.actor : null;
-                // 1) Arrival VO (randomized per your SONUS.arrival buckets)
                 AudioManager.Instance?.PlayArrival(actor);
 
-                // 2) Quiet things down while deciding
-                AudioManager.Instance?.StopSonic();
+                // ✅ Tell MissionLoader we reached THIS anchor. It will track progress and
+                // call HandleMissionComplete() when all anchors are found.
+                MissionLoader.Instance.NotifyAnchorArrived(this);
 
-                // 3) Enter UI mode for the dialog
-                var fpc = FindFirstObjectByType<FirstPersonController>();
-                fpc.SetUIMode(true);
+                if (!MissionLoader.Instance.IsMissionCompleteNow)
+                {
+                    AudioManager.Instance.StopSonic();
+                    var fpc = FindFirstObjectByType<FirstPersonController>();
+                    fpc.SetUIMode(true);
 
-                UIManager.instance.ShowSonicCompletionDialog();
+                    // Your per-target dialog: offers "Try Another" or "Quit"
+                    UIManager.instance.ShowSonicCompletionDialog();
+                }
             }
+
             yield return new WaitForSeconds(0.15f);
         }
     }

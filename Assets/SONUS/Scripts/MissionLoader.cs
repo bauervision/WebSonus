@@ -161,6 +161,9 @@ public class MissionLoader : MonoBehaviour
             return;
         }
 
+        // Instant orientation: strong left/right/ahead/behind + distance
+        AudioManager.Instance.PlayInitialDirectionForActiveTarget(true);
+
         // Finalize HUD if present
         var thm = FindFirstObjectByType<TargetHUDManager>();
         if (thm) thm.SendMessage("FinalizeMissionUI", SendMessageOptions.DontRequireReceiver);
@@ -187,6 +190,16 @@ public class MissionLoader : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────────
     // Progress / Completion
     // ─────────────────────────────────────────────────────────────────────────────
+
+    public bool IsMissionCompleteNow
+    {
+        get
+        {
+            var m = ActiveMission;
+            return m != null && _completedThisMission.Count >= m.anchors.Count;
+        }
+    }
+
     /// <summary>Call this when the player arrives at an anchor (from MissionAnchor).</summary>
     public void NotifyAnchorArrived(MissionAnchor anchor)
     {
@@ -203,8 +216,10 @@ public class MissionLoader : MonoBehaviour
 
     private void HandleMissionComplete()
     {
-        AudioManager.Instance?.StopSonic();
-        ActiveTargetManager.Instance?.SetActiveTarget(null);
+        AudioManager.Instance.StopSonic();
+        ActiveTargetManager.Instance.SetActiveTarget(null);
+
+        AudioManager.Instance.PlayMissionComplete();
 
         var fpc = FindFirstObjectByType<FirstPersonController>();
         fpc?.SetUIMode(true);
@@ -220,6 +235,10 @@ public class MissionLoader : MonoBehaviour
         if (!a) return;
         var go = a.targetObject ? a.targetObject : a.gameObject;
         if (!go) return;
+
+        // ✅ Always re-arm proximity detection, even if the object is already active
+        // (OnEnable only fires when toggling from inactive → active)
+        a.ResetArrivalGate();
 
         if (!go.activeSelf) go.SetActive(true);
 
@@ -242,6 +261,7 @@ public class MissionLoader : MonoBehaviour
             ActiveTargetManager.Instance?.Register(proxy.actor);
         }
     }
+
 
     private void DisableAnchor(MissionAnchor a, bool stopMover = true)
     {
@@ -305,8 +325,15 @@ public class MissionLoader : MonoBehaviour
         }
 
         var next = randomize ? candidates[UnityEngine.Random.Range(0, candidates.Count)] : candidates[0];
-        return SetActiveAnchor(next, playStinger: true);
+        var ok = SetActiveAnchor(next, playStinger: true);
+        if (ok)
+        {
+            // NEW: speak the strong orientation line (+ distance) for the new target
+            AudioManager.Instance.PlayInitialDirectionForActiveTarget(true);
+        }
+        return ok;
     }
+
 
     // Legacy convenience (no-arg random)
     public void SelectAnotherTarget() => SelectAnotherTargetInMission(true);
@@ -345,8 +372,7 @@ public class MissionLoader : MonoBehaviour
     public void UI_EndMission()
     {
         EndMission();
-        var fpc = FindFirstObjectByType<FirstPersonController>();
-        fpc?.SetUIMode(false);
+        UIManager.instance.EnterMapMode();
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

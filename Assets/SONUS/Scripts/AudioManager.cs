@@ -31,22 +31,38 @@ public class AudioManager : MonoBehaviour
 
     [SerializeField] private float minMoveSpeed = 0.3f;         // m/s
 
-    [SerializeField] private float movementCueCooldown = 6f;   // seconds
+    [SerializeField] private float movementCueCooldown = 4f;   // seconds
     [SerializeField] private float ignoreIfCloserThan = 10f;    // meters
 
     [SerializeField] private float straightAheadMovementGrace = 0.5f; // allow movement cue shortly after SA
     private float _lastStraightAheadPlayTime = -999f;
 
 
+    [Header("Initial Direction Clips")]
+    [Tooltip("Use strong orientation phrases for the very first callout")]
+    public AudioClip initialAhead;     // “Target location straight ahead”
+    public AudioClip initialLeft;      // “New target to your left”
+    public AudioClip initialRight;     // “Target identified off to your right”
+    public AudioClip initialBehind;    // “Target located behind you”
+
+    [Header("Milestone Clips")]
+    [Tooltip("Played when all anchors in a mission are found.")]
+    public AudioClip missionComplete;
+
+
+    [Tooltip("Degrees for choosing L/R/Ahead/Behind on initial callout")]
+    [SerializeField] private float initialAheadDeg = 25f;     // <= this → ahead
+    [SerializeField] private float initialBehindDeg = 140f;   // >= this → behind
+
     [Header("Directional Counsel")]
     [SerializeField] private bool counselEnabled = true;
-    [SerializeField] private float counselCooldown = 4f;   // min seconds between any counsel
+    [SerializeField] private float counselCooldown = 2.5f;   // min seconds between any counsel
     [SerializeField] private float maintainCooldown = 6f;  // min seconds between “maintain heading”
-    [SerializeField] private float maintainBandMax = 5f;   // ≤ this is “looking good”
-    [SerializeField] private float driftBandMin = 6f;      // start of drift band
-    [SerializeField] private float driftBandMax = 25f;     // up to this still “small drift” (beyond: handled by other cues)
-    [SerializeField] private bool driftRequiresMaintain = true; // only drift after a maintain cue
-    [SerializeField] private float driftAfterLockWindow = 5f;   // seconds after last corridor lock we allow drift counsel
+    [SerializeField] private float maintainBandMax = 8f;   // ≤ this is “looking good”
+    [SerializeField] private float driftBandMin = 5f;      // start of drift band
+    [SerializeField] private float driftBandMax = 35f;     // up to this still “small drift” (beyond: handled by other cues)
+    [SerializeField] private bool driftRequiresMaintain = false; // only drift after a maintain cue
+    [SerializeField] private float driftAfterLockWindow = 7f;   // seconds after last corridor lock we allow drift counsel
     [SerializeField] private float backOnTrackCooldown = 4f;    // min gap between "back on track" calls
     [SerializeField] private float minLockForMaintain = 1.25f; // seconds aligned before we allow "maintain"
     [SerializeField] private float maintainAfterSA = 3.0f;     // seconds after StraightAhead before "maintain" allowed
@@ -57,6 +73,66 @@ public class AudioManager : MonoBehaviour
     private bool _driftActive = false;            // we’re in a drift episode since last maintain
     private int _driftSide = 0;                  // -1 left, +1 right
     private float _lastBackOnTrackTime = -999f;
+
+
+    public void PlayMissionComplete()
+    {
+        if (voiceSource == null || missionComplete == null) return;
+
+        // Place the “voice” straight ahead of the player so it feels centered.
+        var cam = sceneCamera ?? Camera.main;
+        if (cam != null)
+        {
+            Vector3 player = cam.transform.position;
+            Vector3 ahead = player + cam.transform.forward.normalized * Mathf.Max(0.5f, headingRadius);
+            ahead.y = player.y;
+            PositionAudioHeading(player, ahead);
+        }
+
+        // Single, clean line (stops any current VO, no sequencing)
+        // NOTE: PlaySingle is private; we're inside AudioManager so this is fine.
+        PlaySingle(missionComplete);
+
+        // Optional: bump the HUD timer; harmless if loops are stopped.
+        BumpInterval();
+    }
+
+
+    public void PlayInitialDirectionForActiveTarget(bool alsoSpeakDistance = true)
+    {
+        var active = ActiveTargetManager.Instance?.ActiveTarget;
+        if (active == null || sceneCamera == null || voiceSource == null) return;
+
+        Vector3 player = sceneCamera.transform.position;
+        Vector3 target = geoMapper != null
+            ? geoMapper.LatLonToWorld(active._Lat, active._Lon, player.y)
+            : GeoUtils.GeoToWorld(new Vector2((float)active._Lat, (float)active._Lon));
+        target.y = player.y;
+
+        // Aim the “voice”
+        PositionAudioHeading(player, target);
+
+        float rel = ComputeRelativeAngleDeg(player, target); // -180..+180
+        float abs = Mathf.Abs(rel);
+
+        AudioClip dir;
+        if (abs <= initialAheadDeg) dir = initialAhead;
+        else if (abs >= initialBehindDeg) dir = initialBehind;
+        else if (rel > 0f) dir = initialRight;  // target is to your left
+        else dir = initialLeft; // target is to your right
+
+        if (!alsoSpeakDistance || dir == null)
+        {
+            PlaySingle(dir);
+            BumpInterval();
+            return;
+        }
+
+        // Append distance (helps the player commit to a direction with urgency)
+        var distClip = PickDistanceClip(Vector3.Distance(player, target));
+        PlaySequence(dir, distClip);
+        BumpInterval();
+    }
 
 
     public void PlayArrival(TargetActor actor)
@@ -157,8 +233,8 @@ public class AudioManager : MonoBehaviour
     // Anti-spam & hysteresis for straight-ahead
     [SerializeField] private float straightAheadDeg = 24f;        // instant fire threshold
     [SerializeField] private float straightAheadCooldown = 3f;    // min gap between straight-ahead calls
-    [SerializeField] private float straightAheadRearmSeconds = 0.75f; // how long out of corridor before re-arming
-    [SerializeField] private float straightAheadRearmExtraDeg = 6f;   // must exceed corridor by this extra angle to re-arm
+    [SerializeField] private float straightAheadRearmSeconds = 0.5f; // how long out of corridor before re-arming
+    [SerializeField] private float straightAheadRearmExtraDeg = 4f;   // must exceed corridor by this extra angle to re-arm
     [SerializeField] private float recentLockGrace = 4f;     // seconds after being aligned we still consider "recently locked"
 
     private float _lastStraightAheadTime = -999f;
@@ -332,28 +408,21 @@ public class AudioManager : MonoBehaviour
                         }
 
                         // Drift: only AFTER we've given a maintain while locked, and within drift band
-                        else if (!inMaintainBand
-                                 && absRel >= driftBandMin && absRel <= driftBandMax)
+                        else if (!inMaintainBand && absRel >= driftBandMin && absRel <= driftBandMax)
                         {
                             bool recentlyLocked = (now - _lastLockTime) <= driftAfterLockWindow;
-                            bool allowed = recentlyLocked && (!driftRequiresMaintain || _maintainPlayedThisLock);
+                            bool cooldownOk = (now - _lastCounselTime) >= counselCooldown;
+                            bool allowed = recentlyLocked && cooldownOk &&
+                                           (!driftRequiresMaintain || _maintainPlayedThisLock || absRel >= (driftBandMin + 4f));
+
                             if (allowed)
                             {
                                 float sideY = Mathf.Sign(Vector3.Cross(fwd, toT).y); // +left / -right
-                                if (sideY > 0f)
-                                {
-                                    PlayCounselLeft(player, target);
-                                    _driftActive = true; _driftSide = -1;
-                                    if (debugMovementCues) Debug.Log($"[MC] Counsel: DRIFT LEFT (absRel={absRel:F1}°)");
-                                }
-                                else if (sideY < 0f)
-                                {
-                                    PlayCounselRight(player, target);
-                                    _driftActive = true; _driftSide = +1;
-                                    if (debugMovementCues) Debug.Log($"[MC] Counsel: DRIFT RIGHT (absRel={absRel:F1}°)");
-                                }
+                                if (sideY > 0f) { PlayCounselLeft(player, target); _driftActive = true; _driftSide = -1; }
+                                else if (sideY < 0f) { PlayCounselRight(player, target); _driftActive = true; _driftSide = +1; }
                             }
                         }
+
                     }
                 }
             }
@@ -375,6 +444,20 @@ public class AudioManager : MonoBehaviour
 
             // Detect corridor exit edge (for immediate movement cue)
             bool justExitedCorridor = _wasLockedLastTick && !inCorridor;
+
+            if (justExitedCorridor)
+            {
+                bool cooldownOk = (now - _lastCounselTime) >= (counselCooldown * 0.75f);
+                if (cooldownOk && absRel >= (lockCorridorDeg + 2f))
+                {
+                    float sideY = Mathf.Sign(Vector3.Cross(fwd, toT).y);
+                    if (sideY > 0f) PlayCounselLeft(player, target);
+                    else if (sideY < 0f) PlayCounselRight(player, target);
+                    // mark drift episode
+                    _driftActive = true; _driftSide = sideY > 0f ? -1 : +1;
+                }
+            }
+
             _wasLockedLastTick = inCorridor;
 
             // --- Movement sampling (compute delta BEFORE updating cache) ---
@@ -565,11 +648,13 @@ public class AudioManager : MonoBehaviour
     {
         if (sceneCamera == null) return 0f;
         Vector3 fwd = sceneCamera.transform.forward; fwd.y = 0f;
-        Vector3 toT = (targetPos - playerPos); toT.y = 0f;
-        float aCam = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
-        float aTar = Mathf.Atan2(toT.x, toT.z) * Mathf.Rad2Deg;
-        return Mathf.DeltaAngle(aCam, aTar);
+        Vector3 toT = targetPos - playerPos;
+        toT.y = 0f;
+
+        if (toT.sqrMagnitude < 1e-6f || fwd.sqrMagnitude < 1e-6f) return 0f;
+        return Vector3.SignedAngle(fwd, toT, Vector3.up); // + = left, − = right
     }
+
 
     private AudioClip PickDirectionClip(float relAngle)
     {
