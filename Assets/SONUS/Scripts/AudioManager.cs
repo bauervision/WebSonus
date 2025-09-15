@@ -26,7 +26,7 @@ public class AudioManager : MonoBehaviour
     [Header("Movement Cue Rules")]
     [SerializeField] private bool debugMovementCues = true;
     [SerializeField] private bool movementCuesEnabled = true;
-    [SerializeField] private float lockCorridorDeg = 20f;       // user “on course” cone
+    [SerializeField] private float lockCorridorDeg = 24f;       // user “on course” cone
 
 
     [SerializeField] private float minMoveSpeed = 0.3f;         // m/s
@@ -132,6 +132,7 @@ public class AudioManager : MonoBehaviour
         var distClip = PickDistanceClip(Vector3.Distance(player, target));
         PlaySequence(dir, distClip);
         BumpInterval();
+
     }
 
 
@@ -308,8 +309,54 @@ public class AudioManager : MonoBehaviour
         while (true)
         {
             yield return new WaitForSeconds(cueFrequencySeconds);
-            PlayForActiveTargetNow();
+            PlayPeriodicSmartCue();
         }
+    }
+
+    private void PlayPeriodicSmartCue()
+    {
+        var active = ActiveTargetManager.Instance?.ActiveTarget;
+        if (active == null)
+        {
+            if (playNoTargetCue && sonus?._noTargets) PlaySingle(sonus._noTargets);
+            return;
+        }
+
+        if (sceneCamera == null) { PlayForActiveTargetNow(); return; }
+
+        Vector3 player = sceneCamera.transform.position;
+        Vector3 target = geoMapper != null
+            ? geoMapper.LatLonToWorld(active._Lat, active._Lon, player.y)
+            : GeoUtils.GeoToWorld(new Vector2((float)active._Lat, (float)active._Lon));
+        target.y = player.y;
+
+        float distance = Vector3.Distance(player, target);
+        float rel = ComputeRelativeAngleDeg(player, target);
+        float absRel = Mathf.Abs(rel);
+        float now = Time.time;
+
+        // 1) If we are lined up and SA is armed & off cooldown → speak SA now (don’t miss the moment)
+        bool saReady = _straightAheadArmed && (now - _lastStraightAheadTime) >= straightAheadCooldown;
+        if (absRel <= straightAheadDeg && saReady && sonus?._straightAhead != null)
+        {
+            PositionAudioHeading(player, target);
+            PlaySingle(sonus._straightAhead);
+            _lastStraightAheadTime = now;
+            _lastStraightAheadPlayTime = now;
+            BumpInterval();
+            return;
+        }
+
+        // 2) If we’ve never locked this target yet → replay strong initial (+ distance)
+        if (!_everLockedThisTarget)
+        {
+            PlayInitialDirectionForActiveTarget(true);
+            // OnNewTargetSelected() already ran at target-switch; do NOT call it here.
+            return;
+        }
+
+        // 3) Otherwise, fall back to your normal interval: direction + distance
+        PlayForActiveTargetNow();
     }
 
     // --- Movement cue loop (hysteresis + cooldown) ---
@@ -358,11 +405,26 @@ public class AudioManager : MonoBehaviour
             float absRel = Mathf.Abs(relAngle);
             float now = Time.time;
 
+            bool saReady = _straightAheadArmed && (now - _lastStraightAheadTime) >= straightAheadCooldown;
+            if (absRel <= straightAheadDeg && saReady && sonus?._straightAhead != null)
+            {
+                PositionAudioHeading(player, target);
+                PlaySingle(sonus._straightAhead);
+                _lastStraightAheadTime = now;
+                _lastStraightAheadPlayTime = now;
+                _straightAheadArmed = false;
+                BumpInterval();
+                if (debugMovementCues) Debug.Log($"[MC] SA (absRel={absRel:F1}°) fired pre-corridor.");
+                continue; // skip rest of this tick after playing SA
+            }
+
+
             bool inCorridor = absRel <= lockCorridorDeg;
             bool inMaintainBand = absRel <= maintainBandMax;
 
             if (inCorridor)
             {
+                _everLockedThisTarget = true;
                 _lockTimer += sampleInterval;
                 _lastLockTime = now;
                 _leftCorridorAt = -999f;
@@ -513,8 +575,22 @@ public class AudioManager : MonoBehaviour
         }
     }
 
+    private bool _everLockedThisTarget = false;
+    public void OnNewTargetSelected()
+    {
+        // Reset per-target movement/lock state
+        ResetMovementState(); // this also sets _straightAheadArmed = true in your code
 
+        // Make SA eligible immediately (don’t require rearm delay)
+        _lastStraightAheadTime = Time.time - straightAheadCooldown;
 
+        // Clear any stale recency that might suppress early cues
+        _lastLockTime = -999f;
+        _lastCounselTime = -999f;
+        _lastMaintainTime = -999f;
+        _lastStraightAheadPlayTime = -999f;
+        _everLockedThisTarget = false;
+    }
 
 
     private void ResetMovementState(bool clearLock = true)

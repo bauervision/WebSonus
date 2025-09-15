@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -87,7 +88,7 @@ public class MissionLoader : MonoBehaviour
     }
 
     /// <summary>Start (activate) the currently staged mission.</summary>
-    public void ActivateMission() => ActivateMissionInternal();
+    public void ActivateMission() => StartCoroutine(ActivateMissionCo());
 
     /// <summary>Convenience: stage + start by name.</summary>
     public void LoadMissionByName(string missionName)
@@ -106,6 +107,123 @@ public class MissionLoader : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────────
     // Mission run lifecycle
     // ─────────────────────────────────────────────────────────────────────────────
+
+    private Coroutine _activateCo;
+
+    private IEnumerator ActivateMissionCo()
+    {
+        var m = ActiveMission;
+        if (m == null)
+        {
+            Debug.LogWarning("[MissionLoader] ActivateMissionCo: no active mission staged.");
+            yield break;
+        }
+
+        // 0) Pre-clean + small frame break so the browser can commit memory
+        yield return MemoryGuard("[ML] pre-activate");
+
+        // 1) Stop any movers left around
+        {
+            var movers = FindObjectsByType<SimpleRouteMover>(FindObjectsSortMode.None);
+            foreach (var mv in movers) mv.StopMoving();
+        }
+        yield return null;
+
+        // 2) Reset run state
+        _completedThisMission.Clear();
+        _activeAnchor = null;
+
+        // 3) Clean slate: everything off across all missions (batched)
+        yield return DeactivateAllAnchorsAcrossAllMissionsAsync(batchSize: 32);
+        yield return MemoryGuard("[ML] after deactivate");
+
+        // 4) Validate anchors
+        var available = new List<MissionAnchor>();
+        foreach (var a in m.anchors) if (a) available.Add(a);
+        if (available.Count == 0)
+        {
+            Debug.LogWarning($"[MissionLoader] ActivateMissionCo: mission '{m.name}' has no anchors.");
+            yield break;
+        }
+
+#if UNITY_WEBGL
+        // Safety: forcing hideInactiveAnchors if the set is large in WebGL
+        if (!hideInactiveAnchors && available.Count > 8) hideInactiveAnchors = true;
+#endif
+
+        // 5) If not hiding inactives, enable all but in small batches
+        if (!hideInactiveAnchors)
+        {
+            int i = 0;
+            foreach (var a in available)
+            {
+                EnableAnchor(a);
+                if (!string.IsNullOrEmpty(a.name))
+                {
+                    var go = a.targetObject ? a.targetObject : a.gameObject;
+                    if (go) go.name = a.name;
+                }
+                if ((++i % 8) == 0) yield return null;  // spread work over frames
+            }
+            yield return MemoryGuard("[ML] after enable all");
+        }
+
+        // 6) Choose first anchor
+        MissionAnchor first = m.randomizeFirst
+            ? available[UnityEngine.Random.Range(0, available.Count)]
+            : available[0];
+
+        // 7) Set active (will hide previous if needed)
+        if (!SetActiveAnchor(first, playStinger: true))
+        {
+            Debug.LogWarning("[MissionLoader] ActivateMissionCo: failed to set first anchor active.");
+            yield break;
+        }
+
+        // 8) Re-arm guidance BEFORE the initial cue so SA isn’t gated
+        AudioManager.Instance?.OnNewTargetSelected();
+
+        // 9) Initial orientation (+ distance)
+        AudioManager.Instance?.PlayInitialDirectionForActiveTarget(true);
+
+        // 10) Finalize HUD
+        var thm = FindFirstObjectByType<TargetHUDManager>();
+        if (thm) thm.SendMessage("FinalizeMissionUI", SendMessageOptions.DontRequireReceiver);
+    }
+
+    // --- new helpers ---
+    private IEnumerator DeactivateAllAnchorsAcrossAllMissionsAsync(int batchSize = 32)
+    {
+        int i = 0;
+        foreach (var mission in missions)
+        {
+            foreach (var a in mission.anchors)
+            {
+                DisableAnchor(a, stopMover: true);
+                if ((++i % batchSize) == 0) yield return null; // spread across frames
+            }
+        }
+    }
+
+    private IEnumerator MemoryGuard(string tag)
+    {
+        // Free what we can, then give the browser a frame to grow/commit
+        var op = Resources.UnloadUnusedAssets();
+        yield return op;                 // wait for unload
+        System.GC.Collect();             // compact managed
+        yield return null;               // let WebGL/WASM breathe a frame
+
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        try
+        {
+            var mb = 1024f * 1024f;
+            var reserved = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / mb;
+            var allocated = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / mb;
+            Debug.Log($"{tag}  Reserved={reserved:F1}MB  Alloc={allocated:F1}MB");
+        }
+        catch { }
+#endif
+    }
     private void ActivateMissionInternal()
     {
         var m = ActiveMission;
@@ -230,6 +348,8 @@ public class MissionLoader : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────────
     // Anchor visibility / selection
     // ─────────────────────────────────────────────────────────────────────────────
+
+
     private void EnableAnchor(MissionAnchor a)
     {
         if (!a) return;
@@ -328,7 +448,9 @@ public class MissionLoader : MonoBehaviour
         var ok = SetActiveAnchor(next, playStinger: true);
         if (ok)
         {
-            // NEW: speak the strong orientation line (+ distance) for the new target
+            // re-arm SA & clear stale gates BEFORE we speak the initial cue
+            AudioManager.Instance.OnNewTargetSelected();
+            // speak the strong orientation line (+ distance) for the new target
             AudioManager.Instance.PlayInitialDirectionForActiveTarget(true);
         }
         return ok;
