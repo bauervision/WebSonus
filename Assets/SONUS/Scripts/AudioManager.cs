@@ -67,6 +67,12 @@ public class AudioManager : MonoBehaviour
     [SerializeField] private float minLockForMaintain = 1.25f; // seconds aligned before we allow "maintain"
     [SerializeField] private float maintainAfterSA = 3.0f;     // seconds after StraightAhead before "maintain" allowed
     [SerializeField] private float maintainMinDistance = 20f;  // meters; 0 to disable
+
+    [Header("New Target Grace")]
+    [SerializeField] private float newTargetDriftGraceSeconds = 8f;
+    private float _newTargetGraceUntil = -999f;
+
+
     private float _lastCounselTime = -999f;
     private float _lastMaintainTime = -999f;
     private bool _maintainPlayedThisLock = false; // set when we speak maintain while locked
@@ -74,6 +80,8 @@ public class AudioManager : MonoBehaviour
     private int _driftSide = 0;                  // -1 left, +1 right
     private float _lastBackOnTrackTime = -999f;
 
+
+    private bool LoopsRunning => _periodicLoop != null || _movementLoop != null;
 
     public void PlayMissionComplete()
     {
@@ -266,16 +274,43 @@ public class AudioManager : MonoBehaviour
         }
     }
 
+
+    private void Update()
+    {
+        WatchdogEnsureLoops();
+    }
+
+    private void WatchdogEnsureLoops()
+    {
+        if (!movementCuesEnabled) return;
+        if (sceneCamera == null) return;
+
+        // If movement loop vanished (or never started), relaunch
+        if (_movementLoop == null)
+        {
+            if (debugMovementCues) Debug.Log("[AudioManager] Watchdog: starting movement loop");
+            _movementLoop = StartCoroutine(MovementCueLoop());
+        }
+
+        // If periodic loop vanished (or never started), relaunch with current frequency
+        if (_periodicLoop == null)
+        {
+            if (debugMovementCues) Debug.Log("[AudioManager] Watchdog: starting periodic loop");
+            _periodicLoop = StartCoroutine(PeriodicCueLoop());
+        }
+    }
+
+
     // --- PUBLIC control for UI ---
     public void StartSonic(float frequencySeconds)
     {
         ApplyFrequency(frequencySeconds);
 
-        if (_periodicLoop != null) StopCoroutine(_periodicLoop);
-        _periodicLoop = StartCoroutine(PeriodicCueLoop());
+        if (_periodicLoop != null)
+            _periodicLoop = StartCoroutine(PeriodicCueLoop());
 
-        if (_movementLoop != null) StopCoroutine(_movementLoop);
-        _movementLoop = StartCoroutine(MovementCueLoop());
+        if (_movementLoop != null)
+            _movementLoop = StartCoroutine(MovementCueLoop());
     }
 
     public void StopSonic()
@@ -370,7 +405,7 @@ public class AudioManager : MonoBehaviour
             yield return new WaitForSeconds(sampleInterval);
             if (!movementCuesEnabled) continue;
 
-            var active = ActiveTargetManager.Instance?.ActiveTarget;
+            var active = ActiveTargetManager.Instance.ActiveTarget;
             if (active == null) { ResetMovementState(); continue; }
 
             // Positions
@@ -474,8 +509,14 @@ public class AudioManager : MonoBehaviour
                         {
                             bool recentlyLocked = (now - _lastLockTime) <= driftAfterLockWindow;
                             bool cooldownOk = (now - _lastCounselTime) >= counselCooldown;
-                            bool allowed = recentlyLocked && cooldownOk &&
-                                           (!driftRequiresMaintain || _maintainPlayedThisLock || absRel >= (driftBandMin + 4f));
+                            bool inGrace = now <= _newTargetGraceUntil;
+
+                            bool allowed = cooldownOk &&
+                                           (
+                                               (recentlyLocked && (!driftRequiresMaintain || _maintainPlayedThisLock))  // existing rule
+                                               || inGrace                                                                // new grace path
+                                               || absRel >= (driftBandMin + 4f)                                          // your existing “clearly off” escape hatch
+                                           );
 
                             if (allowed)
                             {
@@ -590,6 +631,8 @@ public class AudioManager : MonoBehaviour
         _lastMaintainTime = -999f;
         _lastStraightAheadPlayTime = -999f;
         _everLockedThisTarget = false;
+
+        _newTargetGraceUntil = Time.time + newTargetDriftGraceSeconds;
     }
 
 

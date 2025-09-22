@@ -180,11 +180,15 @@ public class MissionLoader : MonoBehaviour
             yield break;
         }
 
+        // ⬇️ ensure loops are running (idempotent; won’t double-start)
+        AudioManager.Instance.StartSonic(30f);  // 30s default; adjust as you like
+
         // 8) Re-arm guidance BEFORE the initial cue so SA isn’t gated
-        AudioManager.Instance?.OnNewTargetSelected();
+        AudioManager.Instance.OnNewTargetSelected();
+
 
         // 9) Initial orientation (+ distance)
-        AudioManager.Instance?.PlayInitialDirectionForActiveTarget(true);
+        AudioManager.Instance.PlayInitialDirectionForActiveTarget(true);
 
         // 10) Finalize HUD
         var thm = FindFirstObjectByType<TargetHUDManager>();
@@ -224,68 +228,7 @@ public class MissionLoader : MonoBehaviour
         catch { }
 #endif
     }
-    private void ActivateMissionInternal()
-    {
-        var m = ActiveMission;
-        if (m == null)
-        {
-            Debug.LogWarning("[MissionLoader] ActivateMissionInternal: no active mission staged.");
-            return;
-        }
 
-        // Stop any movers left around
-        var movers = FindObjectsByType<SimpleRouteMover>(FindObjectsSortMode.None);
-        foreach (var mv in movers) mv.StopMoving();
-
-        // Reset run state
-        _completedThisMission.Clear();
-        _activeAnchor = null;
-
-        // Clean slate: everything off across all missions
-        DeactivateAllAnchorsAcrossAllMissions();
-
-        // Validate anchors
-        var available = new List<MissionAnchor>();
-        foreach (var a in m.anchors) if (a != null) available.Add(a);
-        if (available.Count == 0)
-        {
-            Debug.LogWarning($"[MissionLoader] ActivateMissionInternal: mission '{m.name}' has no anchors.");
-            return;
-        }
-
-        // If not hiding inactives, enable all now (but still select one below)
-        if (!hideInactiveAnchors)
-        {
-            foreach (var a in available)
-            {
-                EnableAnchor(a);
-                if (!string.IsNullOrEmpty(a.name))
-                {
-                    var go = a.targetObject ? a.targetObject : a.gameObject;
-                    if (go) go.name = a.name;
-                }
-            }
-        }
-
-        // Choose first anchor
-        MissionAnchor first = m.randomizeFirst
-            ? available[UnityEngine.Random.Range(0, available.Count)]
-            : available[0];
-
-        // Select it (will hide previous if needed)
-        if (!SetActiveAnchor(first, playStinger: true))
-        {
-            Debug.LogWarning("[MissionLoader] ActivateMissionInternal: failed to set first anchor active.");
-            return;
-        }
-
-        // Instant orientation: strong left/right/ahead/behind + distance
-        AudioManager.Instance.PlayInitialDirectionForActiveTarget(true);
-
-        // Finalize HUD if present
-        var thm = FindFirstObjectByType<TargetHUDManager>();
-        if (thm) thm.SendMessage("FinalizeMissionUI", SendMessageOptions.DontRequireReceiver);
-    }
 
     /// <summary>Stop movers, disable anchors, clear active target & state.</summary>
     public void EndMission()
@@ -419,8 +362,9 @@ public class MissionLoader : MonoBehaviour
         if (proxy == null || proxy.actor == null) return false;
 
         _activeAnchor = anchor;
-        ActiveTargetManager.Instance?.SetActiveTarget(proxy.actor);
-        if (playStinger) AudioManager.Instance?.PlayNewTargetClip(proxy.actor);
+        ActiveTargetManager.Instance.SetActiveTarget(proxy.actor);
+        AudioManager.Instance.OnNewTargetSelected();//always re-arm guidance
+        if (playStinger) AudioManager.Instance.PlayNewTargetClip(proxy.actor);
         return true;
     }
 
@@ -448,8 +392,6 @@ public class MissionLoader : MonoBehaviour
         var ok = SetActiveAnchor(next, playStinger: true);
         if (ok)
         {
-            // re-arm SA & clear stale gates BEFORE we speak the initial cue
-            AudioManager.Instance.OnNewTargetSelected();
             // speak the strong orientation line (+ distance) for the new target
             AudioManager.Instance.PlayInitialDirectionForActiveTarget(true);
         }
