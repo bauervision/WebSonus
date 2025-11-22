@@ -285,8 +285,13 @@ public class MissionLoader : MonoBehaviour
         var fpc = FindFirstObjectByType<FirstPersonController>();
         fpc?.SetUIMode(true);
 
-        UIManager.instance.ShowMissionCompleteDialog();
+        // New UI manager handles the completion panel + return-to-map behavior
+        if (SonusUIManager.Instance != null)
+        {
+            SonusUIManager.Instance.OnMissionComplete();
+        }
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────────
     // Anchor visibility / selection
@@ -436,8 +441,12 @@ public class MissionLoader : MonoBehaviour
     public void UI_EndMission()
     {
         EndMission();
-        UIManager.instance.EnterMapMode();
+        if (SonusUIManager.Instance != null)
+        {
+            SonusUIManager.Instance.UI_EndMissionAndReturnToMap();
+        }
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────────
     // Anchor metadata sync (keeps MissionAnchor.missionName/Id in sync)

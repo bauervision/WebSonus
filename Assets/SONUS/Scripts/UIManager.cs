@@ -49,17 +49,24 @@ public class UIManager : MonoBehaviour
 
     private void Start()
     {
-        stationaryButton.onClick.AddListener(() => SetTargetType(TargetType.STATIONARY));
-        dynamicButton.onClick.AddListener(() => SetTargetType(TargetType.DYNAMIC));
-        sonicStarterPanel.SetActive(false);
-        // Visually indicate “no selection yet”
-        HighlightSelectedButton();
-
-        // ToastManager.Instance.Show($"Welcome to Sonus, this is our demo web application. A mixture of Augmented Reality and Sonic Targeting, Sonus is built to allow hands free, and headset free target tracking.", 10f, true);
-
-        // Initialize submode
         SetSceneSubmode(defaultSubmode);
 
+        // 🔧 DEBUG: force us into Scene Mode + Sonic for now
+        StartCoroutine(DebugForceSceneAndSonic());
+
+    }
+
+    private IEnumerator DebugForceSceneAndSonic()
+    {
+        // wait a frame so everything initializes
+        yield return null;
+
+        // Pretend we came from the map and chose a sonic mission
+        EnterSceneMode(isSonicMission: true);
+
+        // Optionally, auto-start the mission after 1 second:
+        yield return new WaitForSeconds(1f);
+        StartSonicHunting();
     }
 
     public void SetTargetType(TargetType type)

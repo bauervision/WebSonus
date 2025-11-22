@@ -84,14 +84,34 @@ public class TargetActor : SurgeActor
 
     public OnlineMapsMarker GetMarker()
     {
-        var items = OnlineMapsMarkerManager.instance.items;
+        // Guard: OnlineMaps may not be initialized in this scene
+        var mgr = OnlineMapsMarkerManager.instance;
+        if (mgr == null)
+        {
+            // Optional: log once if you care
+            // Debug.LogWarning("[TargetActor] OnlineMapsMarkerManager.instance is null; no marker lookup.");
+            return null;
+        }
+
+        var items = mgr.items;
+        if (items == null)
+        {
+            // Optional: log once
+            // Debug.LogWarning("[TargetActor] OnlineMapsMarkerManager.items is null; no markers to search.");
+            return null;
+        }
+
         foreach (var marker in items)
         {
+            if (marker == null) continue;
+
             if (marker["data"] is TargetActor actor && actor._ID == this._ID)
                 return marker;
         }
+
         return null;
     }
+
 
 
 }

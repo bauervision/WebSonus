@@ -59,18 +59,18 @@ public class PlayerLocator : MonoBehaviour
     private void Start()
     {
         // Create user marker (lon, lat)
-        userMarker = OnlineMapsMarkerManager.CreateItem(
-            longitude, latitude, userMarkerTexture, "You"
-        );
-        userMarker.align = OnlineMapsAlign.Center;
-        userMarker.scale = 0.66f;
-        userMarker.rotationDegree = 0f;
+        // userMarker = OnlineMapsMarkerManager.CreateItem(
+        //     longitude, latitude, userMarkerTexture, "You"
+        // );
+        // userMarker.align = OnlineMapsAlign.Center;
+        // userMarker.scale = 0.66f;
+        // userMarker.rotationDegree = 0f;
 
-        // Set map position now, and again in LateUpdate (to ensure full center)
-        map.SetPositionAndZoom(longitude, latitude, 17);
-        map.Redraw();
+        // // Set map position now, and again in LateUpdate (to ensure full center)
+        // map.SetPositionAndZoom(longitude, latitude, 17);
+        // map.Redraw();
 
-        if (playerRoot != null) _lastWorld = playerRoot.position;
+        // if (playerRoot != null) _lastWorld = playerRoot.position;
     }
 
     private Vector2 currentRotation;

@@ -712,7 +712,7 @@ public class AudioManager : MonoBehaviour
         AudioClip distClip = PickDistanceClip(distance);
 
         PlaySequence(dirClip, distClip);
-        AudioCueSlider.instance.ResetTimer();
+        //AudioCueSlider.instance.ResetTimer();
     }
 
     public void PlayNewTargetClip(TargetActor actor)

@@ -99,8 +99,10 @@ public class MissionAnchor : MonoBehaviour
                     var fpc = FindFirstObjectByType<FirstPersonController>();
                     fpc.SetUIMode(true);
 
-                    // Your per-target dialog: offers "Try Another" or "Quit"
-                    UIManager.instance.ShowSonicCompletionDialog();
+                    if (SonusUIManager.Instance != null)
+                    {
+                        SonusUIManager.Instance.OnTargetArrived();
+                    }
                 }
             }
 
