@@ -149,7 +149,7 @@ public class TargetHUDManager : MonoBehaviour
         {
             case 1:
                 {
-                    UIManager.instance.EnterSceneMode(true);//trigger the switch right away
+                    UIManager.instance?.EnterSceneMode(true);//trigger the switch right away
                     MissionLoader.Instance.LoadMissionByName("Static_Starter"); break;
                 }
             case 2: LoadMission_WestAndSouthEastDynamics(); break;

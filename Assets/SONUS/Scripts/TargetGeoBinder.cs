@@ -8,7 +8,7 @@ public class TargetGeoBinder : MonoBehaviour
     public float yOffset = 0.0f;
 
     Terrain _terrain;
-    GeoMapper _mapper;
+    OnlineMapsGeoMapper _mapper;
     double _lastLat, _lastLon;
 
     void Awake()

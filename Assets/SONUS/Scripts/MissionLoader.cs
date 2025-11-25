@@ -320,7 +320,7 @@ public class MissionLoader : MonoBehaviour
 
         // Sync actor & register
         var proxy = go.GetComponent<TargetProxy>();
-        var mapper = PlayerLocator.instance?.mapper ?? FindFirstObjectByType<GeoMapper>();
+        var mapper = PlayerLocator.instance?.mapper ?? FindFirstObjectByType<OnlineMapsGeoMapper>();
         if (proxy && proxy.actor != null && mapper != null)
         {
             var (lat, lon) = mapper.WorldToLatLon(go.transform.position);

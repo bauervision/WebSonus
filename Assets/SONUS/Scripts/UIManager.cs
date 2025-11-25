@@ -126,7 +126,8 @@ public class UIManager : MonoBehaviour
         sonicStarterPanel.SetActive(isSonicMission);//trigger to display right away if it is
 
         SetSceneSubmode(isSonicMission ? 1 : 0);
-        sonicTools.SetActive(isSonicMission);
+        if (sonicTools)
+            sonicTools.SetActive(isSonicMission);
 
         mapCanvas.SetActive(false);
         mapRoot.SetActive(false);
