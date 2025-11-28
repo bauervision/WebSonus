@@ -1,4 +1,5 @@
 using System.Collections;
+using Sonus.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -14,6 +15,9 @@ public enum AppMode
 public class UIManagerOLM : MonoBehaviour
 {
     public static UIManagerOLM instance { get; private set; }
+
+
+
 
     [Header("Roots")]
     public GameObject mapCanvas;
@@ -163,7 +167,14 @@ public class UIManagerOLM : MonoBehaviour
         // 2) Player + terrain mapping (OnlineMaps via PlayerLocator)
         if (PlayerLocator.instance != null)
         {
-            // Note: if you want to move to mission center, do it before EnterSceneMapping
+            // 🔹 NEW: if we have an active Sonus location (e.g., active target),
+            // make that the PlayerLocator's lat/lon BEFORE EnterSceneMapping.
+            if (SonusLocationState.HasValue)
+            {
+                PlayerLocator.instance.latitude = SonusLocationState.Lat;
+                PlayerLocator.instance.longitude = SonusLocationState.Lng;
+            }
+
             PlayerLocator.instance.liveSyncFromPlayer = true;
             PlayerLocator.instance.EnterSceneMapping();
         }
@@ -180,25 +191,22 @@ public class UIManagerOLM : MonoBehaviour
         }
         else
         {
-            // Option A: show starter panel first, then user hits "Start"
             if (sonicStarterPanel != null)
                 sonicStarterPanel.SetActive(true);
-
-            // Option B (if you prefer): uncomment to auto-start sonic immediately
-            // AudioManager.Instance?.StartSonic(frequencySeconds);
 
             if (sonicTools != null)
                 sonicTools.SetActive(true);
         }
 
         // 4) Cursor & FPC
+        // We want FPS control here, not UI mode
         StartCoroutine(ForceCursorVisibleForFrames(2));
         if (player != null)
         {
-            // If SetUIMode(true) means "UI focus" (cursor visible)
-            player.SetUIMode(true);
+            player.SetUIMode(false);
         }
     }
+
 
     private void EnterMapMode_Internal()
     {
@@ -335,4 +343,7 @@ public class UIManagerOLM : MonoBehaviour
     }
 
     #endregion
+
+
+
 }

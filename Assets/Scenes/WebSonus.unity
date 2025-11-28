@@ -26,7 +26,7 @@ RenderSettings:
   m_AmbientIntensity: 0.34
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 2100000, guid: 79794090735926748ba483993634fb54, type: 2}
+  m_SkyboxMaterial: {fileID: 0}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -6390,7 +6390,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1751.6442
+      value: -1307
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalPosition.y
@@ -6398,7 +6398,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 2268.954
+      value: 1308
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalRotation.w
@@ -6440,9 +6440,17 @@ PrefabInstance:
       propertyPath: playerCanMove
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 4459864850019384741, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      propertyPath: m_IncludeLayers.m_Bits
+      value: 4294967295
+      objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384750, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_Name
       value: FirstPersonController
+      objectReference: {fileID: 0}
+    - target: {fileID: 4459864851310106424, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      propertyPath: m_TagString
+      value: MainCamera
       objectReference: {fileID: 0}
     - target: {fileID: 4459864851310106426, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: far clip plane
@@ -7869,7 +7877,7 @@ GameObject:
   m_Component:
   - component: {fileID: 729263340}
   m_Layer: 5
-  m_Name: Scene
+  m_Name: Scene Canvas
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8304,7 +8312,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &757724222
 Transform:
   m_ObjectHideFlags: 0
@@ -10472,6 +10480,7 @@ Transform:
   - {fileID: 204661620}
   - {fileID: 562304280}
   - {fileID: 2057660833}
+  - {fileID: 1235620918}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &878310985
@@ -15106,9 +15115,8 @@ GameObject:
   - component: {fileID: 1235620915}
   - component: {fileID: 1235620914}
   - component: {fileID: 1235620913}
-  - component: {fileID: 1235620912}
   - component: {fileID: 1235620911}
-  - component: {fileID: 1235620910}
+  - component: {fileID: 1235620919}
   m_Layer: 0
   m_Name: Map:3D
   m_TagString: Untagged
@@ -15116,21 +15124,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1235620910
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1235620909}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e647aef79998b6740a728a33d59d61ec, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::InfinityCode.OnlineMapsDemos.SmoothZoomOnMouseEvents
-  map: {fileID: 0}
-  duration: 0.3
-  roundToInt: 1
 --- !u!114 &1235620911
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15150,30 +15143,10 @@ MonoBehaviour:
   hereApiKey: 
   hereAppCode: 
   hereAppID: 
-  mapboxAccessToken: 
+  mapboxAccessToken: pk.eyJ1IjoiYmF1ZXJ2aXNpb24iLCJhIjoiY2x3dGE4MG93MDFrNjJ3cHZnYTkwcDl6ayJ9.dFAqfwhLvKzrcMl5w-yUcQ
   openRouteService: 
   qq: 
   what3Words: 
---- !u!114 &1235620912
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1235620909}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 906a57edadeceae499f4f1626c990b84, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::OnlineMapsCameraOrbit
-  adjustTo: 3
-  adjustToGameObject: {fileID: 0}
-  distance: 1000
-  maxRotationX: 80
-  rotation: {x: 0, y: 0}
-  speed: {x: 1, y: 1}
-  lockTilt: 0
-  lockPan: 0
 --- !u!114 &1235620913
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15210,8 +15183,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OnlineMapsTileSetControl
   activeTexture: {fileID: 0}
-  allowZoom: 1
-  allowUserControl: 1
+  allowZoom: 0
+  allowUserControl: 0
   checkScreenSizeForWheelZoom: 1
   drawingElementManager: {fileID: 0}
   isMapDrag: 0
@@ -15222,7 +15195,7 @@ MonoBehaviour:
   zoomMode: 0
   zoomSensitivity: 1
   zoomSpeed: 1
-  activeCamera: {fileID: 624234403}
+  activeCamera: {fileID: 0}
   elevationManager: {fileID: 0}
   marker2DMode: 0
   marker2DSize: 100
@@ -15231,7 +15204,7 @@ MonoBehaviour:
   elevationResolution: 32
   markerMaterial: {fileID: 0}
   markerShader: {fileID: -6465566751694194690, guid: e951241f479ccfd4aad367e2bc963f5a, type: 3}
-  sizeInScene: {x: 1024, y: 1024}
+  sizeInScene: {x: 4096, y: 4096}
   colliderType: 1
   compressTextures: 1
   drawingsGameObject: {fileID: 0}
@@ -15248,7 +15221,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1235620909}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 442db0cd7f5047744a8c79880b32aad0, type: 3}
   m_Name: 
@@ -15301,7 +15274,7 @@ MonoBehaviour:
   lockRedraw: 0
   needRedraw: 1
   notInteractUnderGUI: 1
-  mapType: arcgis.worldimagery
+  mapType: mapbox.satellite
   osmServer: 0
   proxyURL: https://service.infinity-code.com/redirect.php?
   redrawOnPlay: 1
@@ -15319,7 +15292,7 @@ MonoBehaviour:
   useProxy: 1
   useSoftwareJPEGDecoder: 0
   width: 1024
-  _activeTypeSettings: 
+  _activeTypeSettings: 12Access Token297294pk.eyJ1IjoiYmF1ZXJ2aXNpb24iLCJhIjoiY2x3dGE4MG93MDFrNjJ3cHZnYTkwcDl6ayJ9.dFAqfwhLvKzrcMl5w-yUcQ
   _zoom: 2
   latitude: 0
   longitude: 0
@@ -15331,13 +15304,37 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1235620909}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 512, y: 0, z: -512}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 511.839, y: -1.087638, z: -511.77585}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 863054960}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1235620919
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1235620909}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9374f8bde7511f849906b919ee3a796c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: InfinityCode.OnlineMaps::OnlineMapsMapboxElevationManager
+  bottomMode: 0
+  scale: 1
+  zoomRange:
+    max: 20.999
+    min: 11
+    maxLimit: 20.999
+    minLimit: 1
+  lockYScale: 0
+  yScaleValue: 1
+  zoomOffset: 3
+  cacheElevations: 1
+  accessToken: pk.eyJ1IjoiYmF1ZXJ2aXNpb24iLCJhIjoiY2x3dGE4MG93MDFrNjJ3cHZnYTkwcDl6ayJ9.dFAqfwhLvKzrcMl5w-yUcQ
 --- !u!1 &1239967295
 GameObject:
   m_ObjectHideFlags: 0
@@ -16783,7 +16780,7 @@ Transform:
   m_GameObject: {fileID: 1358116468}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.16101956, y: 1.087638, z: -0.22415125}
+  m_LocalPosition: {x: 0.16101956, y: 464, z: -0.22415125}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -25236,12 +25233,12 @@ MonoBehaviour:
   mapper: {fileID: 1391006876}
   terrainRef: {fileID: 0}
   userMarkerTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
-  playerRoot: {fileID: 0}
+  playerRoot: {fileID: 2057660833}
   latitude: 43.83194
   longitude: 11.3136
   liveSyncFromPlayer: 1
   zoom2DLevel: 17
-  zoom3DLevel: 19
+  zoom3DLevel: 16
 --- !u!1 &1958391486
 GameObject:
   m_ObjectHideFlags: 0
@@ -26753,9 +26750,7 @@ MonoBehaviour:
       _400Greater: {fileID: 8300000, guid: 2fdf685a270d0e040a7fd981d84b0aed, type: 3}
       _500Greater: {fileID: 8300000, guid: a7a6b11dd32bffd48be1dd9b4ece244d, type: 3}
       _1000Greater: {fileID: 8300000, guid: 1f304865ee881a64f9f3ef5b002679b3, type: 3}
-    targetType:
-      _stationary: {fileID: 8300000, guid: 9c6c1d157370ca14b807d65595146882, type: 3}
-      _dynamic: {fileID: 8300000, guid: fb591479e5a06d244a420cdf33d8a89e, type: 3}
+    targetType: 0
     targetMoving:
       __north: {fileID: 8300000, guid: 22405998e89abd94a8cfd4a41f806ed0, type: 3}
       _northEast: {fileID: 8300000, guid: e5a084f4d061fc148ac3bbbf134ef441, type: 3}
@@ -26773,15 +26768,25 @@ MonoBehaviour:
     _noTargets: {fileID: 8300000, guid: 38c7882292a17e741947b0df12d0f478, type: 3}
     _north1: {fileID: 8300000, guid: d8c80e60f7c7e914193337d51b145d9a, type: 3}
     counsel:
-      maintain: []
-      driftLeft: []
-      driftRight: []
+      maintain:
+      - {fileID: 8300000, guid: 6655fc3b67df6e3469a5f6fee1acafc5, type: 3}
+      - {fileID: 8300000, guid: 161a78bd4439043448b452b5c5eeba3a, type: 3}
+      - {fileID: 8300000, guid: 7bbae14c6a31d26479be3cf22b9279e5, type: 3}
+      - {fileID: 8300000, guid: 665113622f31997478e70b7c38cecdf3, type: 3}
+      driftLeft:
+      - {fileID: 8300000, guid: 1b631a0085b25934cb19f5ffdef566b4, type: 3}
+      - {fileID: 8300000, guid: 2918d051b638d5b45b870dea2cf6f53c, type: 3}
+      - {fileID: 8300000, guid: 7425d7b5485f5e745bab8abad7890cfc, type: 3}
+      driftRight:
+      - {fileID: 8300000, guid: d12c5c525537bd5438a822f1d7523683, type: 3}
+      - {fileID: 8300000, guid: e39a6fc1fd167dd4f895151f7c2a0786, type: 3}
+      - {fileID: 8300000, guid: 1cc19faffd37a044ab8e3fcb2c7e0d45, type: 3}
     arrival:
       generic: []
       stationary: []
       dynamic: []
   geoMapper: {fileID: 0}
-  sceneCamera: {fileID: 0}
+  sceneCamera: {fileID: 624234403}
   audioHeading: {fileID: 1960842817}
   voiceSource: {fileID: 1493404343}
   headingRadius: 1.5
@@ -26794,11 +26799,11 @@ MonoBehaviour:
   movementCueCooldown: 12
   ignoreIfCloserThan: 15
   straightAheadMovementGrace: 0.5
-  initialAhead: {fileID: 0}
-  initialLeft: {fileID: 0}
-  initialRight: {fileID: 0}
-  initialBehind: {fileID: 0}
-  missionComplete: {fileID: 0}
+  initialAhead: {fileID: 8300000, guid: 01e54a6a80a25344e9d2fdd82099b00c, type: 3}
+  initialLeft: {fileID: 8300000, guid: 91817d8d06295d749939daff2bc50b38, type: 3}
+  initialRight: {fileID: 8300000, guid: 4b27d5ebd9036ba40863fb5125b21b75, type: 3}
+  initialBehind: {fileID: 8300000, guid: 759d777bf4108684d8083afe79c55e66, type: 3}
+  missionComplete: {fileID: 8300000, guid: a247947ed7183494c813d23ab32fd322, type: 3}
   initialAheadDeg: 25
   initialBehindDeg: 140
   counselEnabled: 1
@@ -28509,4 +28514,3 @@ SceneRoots:
   - {fileID: 1762989273}
   - {fileID: 2125403287}
   - {fileID: 722770062}
-  - {fileID: 1235620918}

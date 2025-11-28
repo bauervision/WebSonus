@@ -32,7 +32,7 @@ public class PlayerLocator : MonoBehaviour
 
     [Header("Zoom")]
     public int zoom2DLevel = 17;
-    public int zoom3DLevel = 19;
+    public int zoom3DLevel = 15;
 
     private Vector2 currentRotation;
 
@@ -185,6 +185,11 @@ public class PlayerLocator : MonoBehaviour
 
     public void EnterSceneMapping()
     {
+        if (playerRoot == null) return;
+
+        // Preserve current rotation so mapping doesn't stomp the look direction
+        Quaternion originalRotation = playerRoot.rotation;
+
         // 1) Pause live sync so nothing rewrites lat/lon mid-setup
         liveSyncFromPlayer = false;
 
@@ -192,15 +197,19 @@ public class PlayerLocator : MonoBehaviour
         var force = mapper as IGeoMapperReinit;
         force?.ForceReinit();
 
-        // 3) Move player to the current geo on the terrain
+        // 3) Move player to the current geo on the terrain (using the new raycast logic)
         MovePlayerToLatLon(latitude, longitude);
 
-        // 4) Sync the marker heading to camera once
+        // 4) Restore rotation so the camera keeps looking where it was
+        playerRoot.rotation = originalRotation;
+
+        // 5) Sync the marker heading to camera once
         SyncMarkerToCamera();
 
-        // 5) Now it’s safe to start live sync
+        // 6) Now it’s safe to start live sync
         liveSyncFromPlayer = true;
     }
+
 
     public void MovePlayerToLatLon(double lat, double lon)
     {
@@ -208,19 +217,34 @@ public class PlayerLocator : MonoBehaviour
         longitude = lon;
         if (mapper == null || playerRoot == null) return;
 
-        // lat/lon -> world via OnlineMapsGeoMapper
+        // 1) Base position from OnlineMapsGeoMapper (useful for X/Z)
         Vector3 pos = mapper.LatLonToWorld(lat, lon);
 
-        // Optional: adjust Y using a physical terrain if present
+        // 2) If you have a real Unity Terrain, still respect it
         if (terrainRef != null)
         {
             float groundY = terrainRef.SampleHeight(pos) + terrainRef.transform.position.y;
             pos.y = groundY;
         }
+        else
+        {
+            // 3) Otherwise, raycast down onto the tileset collider
+            Vector3 rayOrigin = pos + Vector3.up * 200f;
+            if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 400f))
+            {
+                // Land just above the surface so we don't embed
+                pos = hit.point + Vector3.up * 1.0f;
+            }
+            else
+            {
+                // If for some reason we didn't hit anything, don't start in the stratosphere
+                pos.y += 2.0f;
+            }
+        }
 
         playerRoot.position = pos;
 
-        // Keep the 2D marker in sync on move
+        // Keep the 2D marker in sync
         if (userMarker != null)
         {
             userMarker.position = new Vector2((float)longitude, (float)latitude);
@@ -228,6 +252,8 @@ public class PlayerLocator : MonoBehaviour
 
         UpdateMapsFromLatLon();
     }
+
+
 
     // ----------------------
     // Marker / camera sync

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Sonus.Core;
 using UnityEngine;
 
 public class ActiveTargetManager : MonoBehaviour
@@ -43,6 +44,17 @@ public class ActiveTargetManager : MonoBehaviour
     public void SetActiveTarget(TargetActor t)
     {
         _activeTarget = t;
+
+        if (t != null)
+        {
+            SonusLocationState.Set(t._Lat, t._Lon);
+        }
+        else
+        {
+            SonusLocationState.Clear();
+        }
+
         OnActiveTargetChanged?.Invoke(_activeTarget);
     }
 }
+
