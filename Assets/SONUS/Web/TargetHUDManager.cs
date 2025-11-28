@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using MPUIKIT;
+using Sonus.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -93,8 +94,8 @@ public class TargetHUDManager : MonoBehaviour
     {
         // Triangle around the spawn
         Vector2 A = new Vector2((float)actor._Lat, (float)actor._Lon);
-        Vector2 B = GeoUtils.OffsetLocation(A, 45f, rMeters * 0.9f);
-        Vector2 C = GeoUtils.OffsetLocation(A, 200f, rMeters * 1.1f);
+        Vector2 B = GeoMath.OffsetLocation(A, 45f, rMeters * 0.9f);
+        Vector2 C = GeoMath.OffsetLocation(A, 200f, rMeters * 1.1f);
 
         var pts = new List<Waypoint>
     {
@@ -166,11 +167,11 @@ public class TargetHUDManager : MonoBehaviour
         Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
 
         var west = TargetSceneManager.Instance.SpawnTarget(
-            GeoUtils.OffsetLocation(userGeo, 270f, 220f), TargetType.DYNAMIC);
+            GeoMath.OffsetLocation(userGeo, 270f, 220f), TargetType.DYNAMIC);
         RegisterAndName(west, "West Dynamic");
 
         var se = TargetSceneManager.Instance.SpawnTarget(
-            GeoUtils.OffsetLocation(userGeo, 135f, 160f), TargetType.DYNAMIC);
+            GeoMath.OffsetLocation(userGeo, 135f, 160f), TargetType.DYNAMIC);
         RegisterAndName(se, "Southeast Dynamic");
 
         FinalizeMissionUI();
@@ -181,7 +182,7 @@ public class TargetHUDManager : MonoBehaviour
         Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
 
         TargetActor south = TargetSceneManager.Instance.SpawnTarget(
-            GeoUtils.OffsetLocation(userGeo, 180f, 180f), TargetType.DYNAMIC);
+            GeoMath.OffsetLocation(userGeo, 180f, 180f), TargetType.DYNAMIC);
         RegisterAndName(south, "South Dynamic");
 
         ActiveTargetManager.Instance.SetActiveTarget(south);
@@ -189,8 +190,8 @@ public class TargetHUDManager : MonoBehaviour
         FinalizeMissionUI();
 
         Vector2 A = new Vector2((float)south._Lat, (float)south._Lon);
-        Vector2 B = GeoUtils.OffsetLocation(A, 300f, 300f);
-        Vector2 C = GeoUtils.OffsetLocation(A, 135f, 200f);
+        Vector2 B = GeoMath.OffsetLocation(A, 300f, 300f);
+        Vector2 C = GeoMath.OffsetLocation(A, 135f, 200f);
 
         var points = new List<Waypoint>
         {
@@ -220,11 +221,11 @@ public class TargetHUDManager : MonoBehaviour
         Vector2 userGeo = FromTuple(PlayerLocator.instance.GetCurrentLatLon());
 
         TargetActor stationary = TargetSceneManager.Instance.SpawnTarget(
-            GeoUtils.OffsetLocation(userGeo, 0f, 100f), TargetType.STATIONARY);
+            GeoMath.OffsetLocation(userGeo, 0f, 100f), TargetType.STATIONARY);
         stationary._Name = "North Stationary";
 
         TargetActor dynamic = TargetSceneManager.Instance.SpawnTarget(
-            GeoUtils.OffsetLocation(userGeo, 0f, 110f), TargetType.DYNAMIC);
+            GeoMath.OffsetLocation(userGeo, 0f, 110f), TargetType.DYNAMIC);
         dynamic._Name = "North Dynamic";
 
         foreach (var t in new[] { stationary, dynamic })
@@ -247,7 +248,7 @@ public class TargetHUDManager : MonoBehaviour
 
     TargetActor CreateTargetFromOffset(Vector2 origin, float headingDegrees, float distanceMeters, TargetType type)
     {
-        Vector2 newGeo = GeoUtils.OffsetLocation(origin, headingDegrees, distanceMeters);
+        Vector2 newGeo = GeoMath.OffsetLocation(origin, headingDegrees, distanceMeters);
         var target = TargetSceneManager.Instance.SpawnTarget(newGeo, type);
 
         target._Name = GetCardinalName(headingDegrees);
@@ -722,7 +723,7 @@ public class TargetHUDManager : MonoBehaviour
     public IEnumerator MoveTargetByHeading(TargetActor actor, float headingDegrees, float distanceMeters, float speedMetersPerSecond)
     {
         Vector2 startGeo = new Vector2((float)actor._Lat, (float)actor._Lon);
-        Vector2 endGeo = GeoUtils.OffsetLocation(startGeo, headingDegrees, distanceMeters);
+        Vector2 endGeo = GeoMath.OffsetLocation(startGeo, headingDegrees, distanceMeters);
 
         float duration = distanceMeters / speedMetersPerSecond;
 
@@ -905,7 +906,7 @@ public class TargetHUDManager : MonoBehaviour
                 var step = steps[i];
                 Vector2 currentGeo = new Vector2((float)actor._Lat, (float)actor._Lon);
                 Vector2 destination = step.useHeading
-                    ? GeoUtils.OffsetLocation(currentGeo, step.headingDegrees, step.distanceMeters)
+                    ? GeoMath.OffsetLocation(currentGeo, step.headingDegrees, step.distanceMeters)
                     : step.toGeo;
 
                 // ✅ meters-based duration (correct for absolute lat/lon legs)

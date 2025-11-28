@@ -1,0 +1,16 @@
+{
+    "name": "Sonus.App",
+    "rootNamespace": "",
+    "references": [
+        "GUID:7d80d14dfafbc4d48aad5ebdf2941086"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
