@@ -2982,7 +2982,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &285773912
 Transform:
   m_ObjectHideFlags: 0
@@ -9995,7 +9995,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &814847709
 Transform:
   m_ObjectHideFlags: 0
@@ -10905,7 +10905,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0cf708ed316234a48a1ba183527643f7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  sceneCamera: {fileID: 0}
+  sceneCamera: {fileID: 624234403}
   canvas: {fileID: 562304280}
   reticlePrefab: {fileID: 2014764952472726877, guid: f1e4617076ac09b4e835074ac29bc0c7, type: 3}
   directionIndicatorPrefab: {fileID: 5392146809599842333, guid: 4f936cb8f194b5a43a097b4eeca19fc3, type: 3}
@@ -15131,7 +15131,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1235620909}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f768b7afd4612144a9575c4bfd210796, type: 3}
   m_Name: 
@@ -15154,7 +15154,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1235620909}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 41561b278b13936488e1d96def75b3c2, type: 3}
   m_Name: 
@@ -15274,7 +15274,7 @@ MonoBehaviour:
   lockRedraw: 0
   needRedraw: 1
   notInteractUnderGUI: 1
-  mapType: mapbox.satellite
+  mapType: arcgis.worldimagery
   osmServer: 0
   proxyURL: https://service.infinity-code.com/redirect.php?
   redrawOnPlay: 1
@@ -15292,7 +15292,7 @@ MonoBehaviour:
   useProxy: 1
   useSoftwareJPEGDecoder: 0
   width: 1024
-  _activeTypeSettings: 12Access Token297294pk.eyJ1IjoiYmF1ZXJ2aXNpb24iLCJhIjoiY2x3dGE4MG93MDFrNjJ3cHZnYTkwcDl6ayJ9.dFAqfwhLvKzrcMl5w-yUcQ
+  _activeTypeSettings: 
   _zoom: 2
   latitude: 0
   longitude: 0
@@ -15320,9 +15320,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 1235620909}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9374f8bde7511f849906b919ee3a796c, type: 3}
+  m_Script: {fileID: 11500000, guid: 800307c426dd863468f304303b80dfe2, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: InfinityCode.OnlineMaps::OnlineMapsMapboxElevationManager
+  m_EditorClassIdentifier: InfinityCode.OnlineMaps::OnlineMapsBingMapsElevationManager
   bottomMode: 0
   scale: 1
   zoomRange:
@@ -15332,9 +15332,9 @@ MonoBehaviour:
     minLimit: 1
   lockYScale: 0
   yScaleValue: 1
-  zoomOffset: 3
-  cacheElevations: 1
-  accessToken: pk.eyJ1IjoiYmF1ZXJ2aXNpb24iLCJhIjoiY2x3dGE4MG93MDFrNjJ3cHZnYTkwcDl6ayJ9.dFAqfwhLvKzrcMl5w-yUcQ
+  tweenUpdateValues: 0
+  tweenDuration: 0.5
+  bingAPI: AiAWtE2TKkRjd0Yp4ogrCHhLMd4pxrWVe3kJT3MfouvLbudrJ3OUIJMQnewGTas0
 --- !u!1 &1239967295
 GameObject:
   m_ObjectHideFlags: 0
@@ -17177,7 +17177,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1391006875
 Transform:
   m_ObjectHideFlags: 0
@@ -17205,8 +17205,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f1f6cc2b467dcd46acf04399ad5b770, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OnlineMapsGeoMapper
-  map: {fileID: 1458864438}
-  tileset: {fileID: 0}
+  map: {fileID: 1235620917}
+  tileset: {fileID: 1235620914}
   yOffset: 1.8
 --- !u!1 &1393022278
 GameObject:
@@ -18202,7 +18202,7 @@ GameObject:
   - component: {fileID: 1458864431}
   - component: {fileID: 1458864439}
   m_Layer: 0
-  m_Name: Map
+  m_Name: 'Map: 2D'
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -20202,7 +20202,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1551633886
 Transform:
   m_ObjectHideFlags: 0
@@ -24306,7 +24306,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1884768669
 Transform:
   m_ObjectHideFlags: 0

@@ -1,3 +1,16 @@
 {
-	"name": "Sonus.Core"
+    "name": "Sonus.Core",
+    "rootNamespace": "",
+    "references": [
+        "GUID:711ba16d2f300ce498103120e3e6a421"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }
