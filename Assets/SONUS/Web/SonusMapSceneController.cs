@@ -1,31 +1,41 @@
+// SONUS/Web/SonusMapSceneController.cs
+using System.Collections;
 using UnityEngine;
 using OnlineMaps;
 using Sonus.Core;
 
 public class SonusMapSceneController : MonoBehaviour
 {
-    public enum Mode
-    {
-        Map2D,
-        Scene3D
-    }
+    public enum Mode { Map2D, Scene3D }
 
     [Header("Mode Roots")]
     public GameObject mapModeRoot;   // assign "Map Mode" GO here
     public GameObject sceneModeRoot; // assign "Scene Mode" GO here
 
     [Header("Defaults")]
-    public double defaultLatitude = 37.305373;
-    public double defaultLongitude = -80.611872;
+    public double defaultLatitude = 37.3045;
+    public double defaultLongitude = -80.6115;
 
     [Header("2D Map (Map Mode)")]
     [Tooltip("Online Maps Map component for the 2D (UI) map")]
     public Map map2D;
 
-    [Tooltip("Camera that renders the 2D map UI")]
+    [Tooltip("Camera that renders the 2D map UI (optional)")]
     public Camera mapCamera;
 
     public int zoom2D = 17;
+
+    [Header("2D User Marker")]
+    public Texture2D userMarkerTexture;
+    public float userMarkerScale = 1f;
+
+    [Tooltip("Rotate the 2D marker to reflect player orientation captured in 3D.")]
+    public bool rotate2DMarkerWithPlayer = true;
+
+    [Tooltip("Degrees offset applied to marker rotation if your icon points differently.")]
+    public float markerYawOffsetDegrees = 0f;
+
+    private Marker2D _userMarker2D;
 
     [Header("3D Map (Scene Mode)")]
     [Tooltip("Online Maps Map component for the 3D tileset")]
@@ -37,56 +47,111 @@ public class SonusMapSceneController : MonoBehaviour
     [Tooltip("Camera that renders the 3D scene / tileset")]
     public Camera sceneCamera;
 
-    [Tooltip("Player root / FPS controller transform")]
+    [Tooltip("Player root / FirstPersonController transform")]
     public Transform playerRoot;
 
     public int zoom3D = 16;
+
+    [Tooltip("How far above the terrain to spawn the player (world units).")]
     public float playerSpawnHeight = 2f;
 
-    [Header("Raycast")]
-    [Tooltip("LayerMask for the tileset collider. Leave  ~0  to hit everything.")]
-    public LayerMask tilesetLayerMask = ~0;
+    [Header("3D Spawn Probe")]
+    [Tooltip("If true, we use a temporary hidden Marker3D as an elevation-aware spawn probe, then disable it.")]
+    public bool useHiddenSpawnProbe = true;
+
+    private Marker3D _spawnProbeMarker3D;
+    private GameObject _spawnProbePrefab;
+
+    [Header("Geo Mapping")]
+    [Tooltip("Assign your OLMGeoMapper that targets the 3D control/tileset.")]
+    public OLMGeoMapper geoMapperOL;
+
+    [Header("Debug / Instrumentation")]
+    public bool debugLogGeoEachSecond = false;
+    public bool debugLogSwitchSummary = true;
+
+    private float _nextGeoLogTime;
+    private float _lastPlayerYawDeg;
 
     private Mode _mode = Mode.Map2D;
+    private Coroutine _enter3DRoutine;
+    private Coroutine _enter2DRoutine;
+
+    // --------------------------
+    // Unity lifecycle
+    // --------------------------
 
     private void Awake()
     {
-        // Try to auto-wire the 3D control if not set
         if (map3D != null && map3DControl == null)
-        {
             map3DControl = map3D.control3D;
+
+        if (useHiddenSpawnProbe)
+        {
+            _spawnProbePrefab = new GameObject("SonusSpawnProbePrefab");
+            _spawnProbePrefab.hideFlags = HideFlags.HideAndDontSave;
+            _spawnProbePrefab.SetActive(false);
         }
     }
 
     private void Start()
     {
-        // For this scene, always start at our configured default
+        // Initialize state once.
         SonusLocationState.Set(defaultLatitude, defaultLongitude);
 
+        // Ensure the 3D control is bound to the scene camera (critical for ScreenToLocation).
         if (map3DControl != null && sceneCamera != null)
-        {
             map3DControl.activeCamera = sceneCamera;
+
+        // Optional: keep mapper camera/control aligned too.
+        if (geoMapperOL != null)
+        {
+            if (geoMapperOL.map == null) geoMapperOL.map = map3D;
+            if (geoMapperOL.control3D == null) geoMapperOL.control3D = map3DControl;
+            if (geoMapperOL.sceneCamera == null) geoMapperOL.sceneCamera = sceneCamera;
         }
 
+        // Init both maps at default state.
         double lat = SonusLocationState.Lat;
         double lng = SonusLocationState.Lng;
 
         Init2DMap(lat, lng);
+        Ensure2DUserMarker(lng, lat);
+
         Init3DMap(lat, lng);
 
         SetMode(Mode.Map2D);
     }
 
+    private void Update()
+    {
+        if (!debugLogGeoEachSecond) return;
+        if (_mode != Mode.Scene3D) return;
+        if (Time.time < _nextGeoLogTime) return;
 
-    // ------------------------------------------------------
+        _nextGeoLogTime = Time.time + 1f;
+
+        if (geoMapperOL == null)
+        {
+            Debug.Log("[SONUS][GEO] missing geoMapperOL");
+            return;
+        }
+
+        // Use the same sampling method we trust on switch (feet-ish screen sample).
+        if (geoMapperOL.TryFeetScreenToLatLon(out double lat, out double lon))
+            Debug.Log($"[SONUS][GEO] FEET lat/lon = {lat:F6}, {lon:F6}");
+        else
+            Debug.Log("[SONUS][GEO] FEET geo FAILED");
+    }
+
+    // --------------------------
     // Initialization helpers
-    // ------------------------------------------------------
+    // --------------------------
 
     private void Init2DMap(double lat, double lng)
     {
         if (map2D == null) return;
 
-        // v4 way: center via MapView
         map2D.view.SetCenter((float)lng, (float)lat, zoom2D);
         map2D.Redraw();
     }
@@ -99,9 +164,26 @@ public class SonusMapSceneController : MonoBehaviour
         map3D.Redraw();
     }
 
-    // ------------------------------------------------------
+    private void Ensure2DUserMarker(double lng, double lat)
+    {
+        if (map2D == null) return;
+        if (_userMarker2D != null) return;
+        if (userMarkerTexture == null) return;
+
+        _userMarker2D = Marker2DManager.CreateItem(lng, lat, userMarkerTexture, "user");
+        if (_userMarker2D == null) return;
+
+        _userMarker2D.align = Align.Center;
+        _userMarker2D.scale = userMarkerScale;
+        _userMarker2D.location = new GeoPoint(lng, lat);
+
+        Apply2DMarkerYaw();
+        map2D.Redraw();
+    }
+
+    // --------------------------
     // Mode switching
-    // ------------------------------------------------------
+    // --------------------------
 
     public void ToggleMode()
     {
@@ -110,20 +192,40 @@ public class SonusMapSceneController : MonoBehaviour
 
     private void SetMode(Mode next)
     {
+        // Snapshot BEFORE leaving 3D.
+        if (_mode == Mode.Scene3D && next == Mode.Map2D)
+            Capture3DStateSnapshotAndLog();
+
         _mode = next;
         bool mapMode = _mode == Mode.Map2D;
 
         if (mapModeRoot != null) mapModeRoot.SetActive(mapMode);
         if (sceneModeRoot != null) sceneModeRoot.SetActive(!mapMode);
 
-        if (mapMode) EnterMapMode();
-        else EnterSceneMode();
+        // Stop any pending enter routines.
+        if (_enter2DRoutine != null) StopCoroutine(_enter2DRoutine);
+        if (_enter3DRoutine != null) StopCoroutine(_enter3DRoutine);
+
+        if (mapMode)
+        {
+            // Buffer safety: delay one frame before touching 2D map again.
+            _enter2DRoutine = StartCoroutine(EnterMapModeRoutine());
+        }
+        else
+        {
+            EnterSceneMode();
+        }
     }
 
+    private IEnumerator EnterMapModeRoutine()
+    {
+        yield return null;
+        EnterMapMode();
+    }
 
-    // ------------------------------------------------------
-    // Enter Map Mode: center 2D on current shared geo
-    // ------------------------------------------------------
+    // --------------------------
+    // Enter Map Mode
+    // --------------------------
 
     private void EnterMapMode()
     {
@@ -132,64 +234,171 @@ public class SonusMapSceneController : MonoBehaviour
         double lat = SonusLocationState.Lat;
         double lng = SonusLocationState.Lng;
 
+        Ensure2DUserMarker(lng, lat);
+
         map2D.view.SetCenter((float)lng, (float)lat, zoom2D);
+        Sync2DUserMarker();
         map2D.Redraw();
+
+        if (debugLogSwitchSummary && _userMarker2D != null)
+        {
+            Debug.Log(
+                $"[SONUS][2D AFTER SYNC] marker(lat,lon)=({_userMarker2D.location.latitude:F6},{_userMarker2D.location.longitude:F6}) " +
+                $"state=({SonusLocationState.Lat:F6},{SonusLocationState.Lng:F6})"
+            );
+        }
     }
 
-    // ------------------------------------------------------
-    // Enter Scene Mode:
-    // 1) Center 3D map
-    // 2) Teleport player onto tileset at shared lat/lon
-    // ------------------------------------------------------
+    // --------------------------
+    // Enter Scene Mode
+    // --------------------------
 
     private void EnterSceneMode()
     {
-        if (map3D == null || map3DControl == null || playerRoot == null || sceneCamera == null) return;
+        if (map3D == null || map3DControl == null || playerRoot == null) return;
 
         double lat = SonusLocationState.Lat;
         double lng = SonusLocationState.Lng;
 
-        // Center 3D tileset map
         map3D.view.SetCenter((float)lng, (float)lat, zoom3D);
         map3D.Redraw();
 
-        // Convert geo -> screen using the control
-        Vector2 screenPos = map3DControl.LocationToScreen(lng, lat);
+        if (useHiddenSpawnProbe)
+            _enter3DRoutine = StartCoroutine(EnterSceneModeRoutine(lng, lat));
 
-        // Raycast from scene camera through that screen point onto the tileset
-        Ray ray = sceneCamera.ScreenPointToRay(new Vector3(screenPos.x, screenPos.y, 0f));
-
-        if (Physics.Raycast(ray, out RaycastHit hit, 10000f, tilesetLayerMask))
-        {
-            Vector3 worldPos = hit.point;
-            worldPos.y += playerSpawnHeight;
-            playerRoot.position = worldPos;
-        }
-        else
-        {
-            // Fallback: just place near map3D origin if raycast misses
-            Vector3 fallback = map3D.transform.position + Vector3.up * playerSpawnHeight;
-            playerRoot.position = fallback;
-        }
+        // Start logger on entering 3D.
+        _nextGeoLogTime = Time.time + 1f;
     }
 
-    // ------------------------------------------------------
-    // Sync player position -> shared lat/lon
-    // ------------------------------------------------------
-
-    private void LateUpdate()
+    private IEnumerator EnterSceneModeRoutine(double lng, double lat)
     {
-        if (_mode != Mode.Scene3D) return;
-        if (map3DControl == null || map3D == null || playerRoot == null || sceneCamera == null) return;
+        CreateOrMoveSpawnProbe(lng, lat);
 
-        // Convert world -> screen
-        Vector3 world = playerRoot.position;
-        Vector3 screenPos3 = sceneCamera.WorldToScreenPoint(world);
+        // Give OnlineMaps a couple frames to apply elevation/placement.
+        yield return null;
+        yield return null;
 
-        // Convert screen -> geo using 3D control's ScreenToLocation
-        Vector2 screenPos = new Vector2(screenPos3.x, screenPos3.y);
-        GeoPoint g = map3D.control.ScreenToLocation(screenPos);
+        PlacePlayerAtSpawnProbe();
+        _lastPlayerYawDeg = playerRoot.eulerAngles.y;
 
-        SonusLocationState.Set(g.latitude, g.longitude);
+        CleanupSpawnProbe();
+    }
+
+    private void CreateOrMoveSpawnProbe(double lng, double lat)
+    {
+        if (_spawnProbePrefab == null) return;
+
+        if (_spawnProbeMarker3D == null)
+        {
+            _spawnProbeMarker3D = Marker3DManager.CreateItem(lng, lat, _spawnProbePrefab, "spawn-probe");
+            if (_spawnProbeMarker3D == null) return;
+
+            _spawnProbeMarker3D.sizeType = Marker3D.SizeType.scene;
+        }
+
+        _spawnProbeMarker3D.scale = 1f;
+        _spawnProbeMarker3D.enabled = true;
+        _spawnProbeMarker3D.location = new GeoPoint(lng, lat);
+        _spawnProbeMarker3D.Update();
+    }
+
+    private void PlacePlayerAtSpawnProbe()
+    {
+        if (_spawnProbeMarker3D == null) return;
+        Transform markerTr = _spawnProbeMarker3D.transform;
+        if (markerTr == null) return;
+
+        Vector3 p = markerTr.position;
+
+        var cc = playerRoot.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+
+        playerRoot.position = new Vector3(p.x, p.y + playerSpawnHeight, p.z);
+
+        if (cc != null) cc.enabled = true;
+    }
+
+    private void CleanupSpawnProbe()
+    {
+        if (_spawnProbeMarker3D == null) return;
+        _spawnProbeMarker3D.enabled = false;
+    }
+
+    // --------------------------
+    // Snapshot on 3D -> 2D switch
+    // --------------------------
+
+    private void Capture3DStateSnapshotAndLog()
+    {
+        if (playerRoot != null)
+            _lastPlayerYawDeg = playerRoot.eulerAngles.y;
+
+        double snapLat = SonusLocationState.Lat;
+        double snapLon = SonusLocationState.Lng;
+
+        bool gotGeo = false;
+
+        if (geoMapperOL != null && geoMapperOL.TryFeetScreenToLatLon(out double lat, out double lon))
+        {
+            gotGeo = true;
+            snapLat = lat;
+            snapLon = lon;
+            SonusLocationState.Set(snapLat, snapLon);
+        }
+
+        if (!debugLogSwitchSummary) return;
+
+        double stateLat = SonusLocationState.Lat;
+        double stateLon = SonusLocationState.Lng;
+
+        double markerLat = double.NaN, markerLon = double.NaN;
+        if (_userMarker2D != null)
+        {
+            markerLon = _userMarker2D.location.longitude;
+            markerLat = _userMarker2D.location.latitude;
+        }
+
+        double mapLat = double.NaN, mapLon = double.NaN;
+        if (map2D != null)
+        {
+            try
+            {
+                mapLon = map2D.view.longitude;
+                mapLat = map2D.view.latitude;
+            }
+            catch { /* ignore */ }
+        }
+
+        Debug.Log(
+            $"[SONUS][SWITCH 3D->2D] gotGeo={gotGeo} " +
+            $"snap(lat,lon)=({snapLat:F6},{snapLon:F6}) " +
+            $"state(lat,lon)=({stateLat:F6},{stateLon:F6}) " +
+            $"marker(lat,lon)=({markerLat:F6},{markerLon:F6}) " +
+            $"mapCenter(lat,lon)=({mapLat:F6},{mapLon:F6})"
+        );
+    }
+
+    // --------------------------
+    // 2D marker sync
+    // --------------------------
+
+    private void Sync2DUserMarker()
+    {
+        if (_userMarker2D == null) return;
+
+        double lat = SonusLocationState.Lat;
+        double lng = SonusLocationState.Lng;
+
+        _userMarker2D.location = new GeoPoint(lng, lat);
+        Apply2DMarkerYaw();
+    }
+
+    private void Apply2DMarkerYaw()
+    {
+        if (!rotate2DMarkerWithPlayer) return;
+        if (_userMarker2D == null) return;
+
+        float yaw = _lastPlayerYawDeg + markerYawOffsetDegrees;
+        _userMarker2D.rotation = yaw;
     }
 }

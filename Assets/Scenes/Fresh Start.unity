@@ -303,7 +303,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Toggle
+  m_text: Enter 3D
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -330,8 +330,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 24
-  m_fontSizeBase: 24
+  m_fontSize: 20
+  m_fontSizeBase: 20
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -508,10 +508,8 @@ GameObject:
   - component: {fileID: 636010313}
   - component: {fileID: 636010312}
   - component: {fileID: 636010311}
-  - component: {fileID: 636010310}
   - component: {fileID: 636010309}
   - component: {fileID: 636010308}
-  - component: {fileID: 636010307}
   m_Layer: 0
   m_Name: Map:3D
   m_TagString: Untagged
@@ -534,28 +532,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1499806379}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &636010307
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 636010305}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c0de566690d64ec1b82a6729fb95a00c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: OnlineMaps::OnlineMaps.MouseController
-  allowUserControl: 1
-  allowZoom: 1
-  checkScreenSizeForWheelZoom: 1
-  dragMarkerHoldingCTRL: 0
-  longPressDelay: 1
-  startDragDistance: 4
-  zoomInOnDoubleClick: 1
-  zoomMode: 0
-  zoomSensitivity: 1
-  zoomSpeed: 1
 --- !u!114 &636010308
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -576,7 +552,7 @@ MonoBehaviour:
   hereAppCode: 
   hereAppID: 
   mapTiler: 
-  mapboxAccessToken: 
+  mapboxAccessToken: pk.eyJ1IjoiYmF1ZXJ2aXNpb24iLCJhIjoiY2x3dGE4MG93MDFrNjJ3cHZnYTkwcDl6ayJ9.dFAqfwhLvKzrcMl5w-yUcQ
   openRouteService: 
   qq: 
   tomTom: 
@@ -604,26 +580,6 @@ MonoBehaviour:
   yScaleValue: 1
   zoomOffset: 3
   cacheElevations: 1
---- !u!114 &636010310
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 636010305}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4d5afe29f6484884487a981455637f23, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: OnlineMaps::OnlineMaps.CameraOrbit
-  adjustTo: 3
-  adjustToGameObject: {fileID: 0}
-  distance: 1000
-  maxRotationX: 80
-  rotation: {x: 0, y: 0}
-  speed: {x: 1, y: 1}
-  lockTilt: 0
-  lockPan: 0
 --- !u!114 &636010311
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -665,7 +621,7 @@ MonoBehaviour:
   marker2DSize: 100
   marker3DManager: {fileID: 0}
   checkMarker2DVisibility: 0
-  drawingShader: {fileID: 0}
+  drawingShader: {fileID: -6465566751694194690, guid: 896c4566c534d544085eac02e8d305d9, type: 3}
   elevationResolution: 32
   markerMaterial: {fileID: 0}
   markerShader: {fileID: 4800000, guid: 650dd9526735d5b46b79224bc6e94025, type: 3}
@@ -677,7 +633,7 @@ MonoBehaviour:
   drawingMode: 0
   overlayFromParentTiles: 1
   tileMaterial: {fileID: 0}
-  tilesetShader: {fileID: 0}
+  tilesetShader: {fileID: 4800000, guid: e9c4d591d33ea3547a781b37788dc5b7, type: 3}
   _mipmapForTiles: 0
 --- !u!114 &636010313
 MonoBehaviour:
@@ -686,7 +642,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 636010305}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9f5ad3202303cd940a63128c0f93904e, type: 3}
   m_Name: 
@@ -1117,7 +1073,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -8192
+      value: -5400
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalPosition.z
@@ -1154,6 +1110,10 @@ PrefabInstance:
     - target: {fileID: 4459864850019384750, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_Name
       value: FirstPersonController
+      objectReference: {fileID: 0}
+    - target: {fileID: 4459864851310106426, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      propertyPath: far clip plane
+      value: 100000
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1217,6 +1177,11 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!20 &1003238716 stripped
+Camera:
+  m_CorrespondingSourceObject: {fileID: 4459864851310106426, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+  m_PrefabInstance: {fileID: 1003238711}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1091994358
 GameObject:
   m_ObjectHideFlags: 0
@@ -1269,7 +1234,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f01c58fafaccfd341b5d804300edd67e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Sonus.Web::ToggleButton
-  isOn: 0
+  isOn: 1
   button: {fileID: 1091994361}
   iconImage: {fileID: 0}
   content: {fileID: 1091994359}
@@ -1279,19 +1244,43 @@ MonoBehaviour:
   tintIcon: 0
   activeIconTint: {r: 1, g: 1, b: 1, a: 1}
   inactiveIconTint: {r: 1, g: 1, b: 1, a: 0.7}
-  depressedY: -2
+  depressedY: 0
   tweenDuration: 0.08
-  activeText: Enter Scene
-  inactiveText: Enter Map
+  activeText: Enter 3D
+  inactiveText: Return to Map
   tintStateText: 0
   activeTextColor: {r: 1, g: 1, b: 1, a: 1}
   inactiveTextColor: {r: 1, g: 1, b: 1, a: 0.7}
   onActive:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1278132610}
+        m_TargetAssemblyTypeName: SonusMapSceneController, Sonus.Web
+        m_MethodName: ToggleMode
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   onDeactive:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1278132610}
+        m_TargetAssemblyTypeName: SonusMapSceneController, Sonus.Web
+        m_MethodName: ToggleMode
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1091994361
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1565,7 +1554,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: OnlineMaps::OnlineMaps.Marker2DManager
   _items: []
   defaultScale: 1
-  defaultTexture: {fileID: 0}
+  defaultTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
   defaultAlign: 7
   allowAddMarkerByM: 1
 --- !u!212 &1243300614
@@ -1684,6 +1673,71 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1661845404}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1278132609
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1278132611}
+  - component: {fileID: 1278132610}
+  m_Layer: 0
+  m_Name: Scene Controller
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1278132610
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1278132609}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51046a2841e6d1144a69b7e7768cdab0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::SonusMapSceneController
+  mapModeRoot: {fileID: 1661845403}
+  sceneModeRoot: {fileID: 1499806378}
+  defaultLatitude: 37.3045
+  defaultLongitude: -80.6115
+  map2D: {fileID: 1243300615}
+  mapCamera: {fileID: 961739752}
+  zoom2D: 17
+  userMarkerTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
+  userMarkerScale: 1
+  map3D: {fileID: 636010315}
+  map3DControl: {fileID: 636010312}
+  sceneCamera: {fileID: 1003238716}
+  playerRoot: {fileID: 1003238712}
+  zoom3D: 16
+  playerSpawnHeight: 2
+  debugMarkerPrefab: {fileID: 1577165980682188090, guid: 20af33bdb21f6534297f86a0572747d6, type: 3}
+  debugMarkerScale: 10
+  showDebugMarker: 1
+  tilesetLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!4 &1278132611
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1278132609}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 19.43426, y: -0.42973, z: 0.2555}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1329251872
 GameObject:
@@ -2041,3 +2095,4 @@ SceneRoots:
   - {fileID: 1661845404}
   - {fileID: 1329251876}
   - {fileID: 501376885}
+  - {fileID: 1278132611}
