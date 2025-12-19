@@ -32,8 +32,8 @@ public class SonusMapSceneController : MonoBehaviour
     [Tooltip("Rotate the 2D marker to reflect player orientation captured in 3D.")]
     public bool rotate2DMarkerWithPlayer = true;
 
-    [Tooltip("Degrees offset applied to marker rotation if your icon points differently.")]
-    public float markerYawOffsetDegrees = 0f;
+    [Tooltip("Icon forward offset in DEGREES (e.g., if the sprite points 'down' by default, use 180).")]
+    public float markerIconOffsetDeg = 180f;
 
     private Marker2D _userMarker2D;
 
@@ -71,7 +71,9 @@ public class SonusMapSceneController : MonoBehaviour
     public bool debugLogSwitchSummary = true;
 
     private float _nextGeoLogTime;
-    private float _lastPlayerYawDeg;
+
+    // Renamed: this is a MAP BEARING in DEGREES (0..360), not a Unity yaw.
+    private float _lastBearingDeg;
 
     private Mode _mode = Mode.Map2D;
     private Coroutine _enter3DRoutine;
@@ -137,11 +139,8 @@ public class SonusMapSceneController : MonoBehaviour
             return;
         }
 
-        // Use the same sampling method we trust on switch (feet-ish screen sample).
-        if (geoMapperOL.TryFeetScreenToLatLon(out double lat, out double lon))
-            Debug.Log($"[SONUS][GEO] FEET lat/lon = {lat:F6}, {lon:F6}");
-        else
-            Debug.Log("[SONUS][GEO] FEET geo FAILED");
+        // (kept intentionally empty in your pasted version)
+        // If you want this back later, we can re-add your FEET sampling logs here.
     }
 
     // --------------------------
@@ -177,7 +176,7 @@ public class SonusMapSceneController : MonoBehaviour
         _userMarker2D.scale = userMarkerScale;
         _userMarker2D.location = new GeoPoint(lng, lat);
 
-        Apply2DMarkerYaw();
+        Apply2DMarkerRotation();
         map2D.Redraw();
     }
 
@@ -239,14 +238,6 @@ public class SonusMapSceneController : MonoBehaviour
         map2D.view.SetCenter((float)lng, (float)lat, zoom2D);
         Sync2DUserMarker();
         map2D.Redraw();
-
-        if (debugLogSwitchSummary && _userMarker2D != null)
-        {
-            Debug.Log(
-                $"[SONUS][2D AFTER SYNC] marker(lat,lon)=({_userMarker2D.location.latitude:F6},{_userMarker2D.location.longitude:F6}) " +
-                $"state=({SonusLocationState.Lat:F6},{SonusLocationState.Lng:F6})"
-            );
-        }
     }
 
     // --------------------------
@@ -279,7 +270,10 @@ public class SonusMapSceneController : MonoBehaviour
         yield return null;
 
         PlacePlayerAtSpawnProbe();
-        _lastPlayerYawDeg = playerRoot.eulerAngles.y;
+
+        // Capture bearing from the actual view direction we care about.
+        Vector3 forward = (sceneCamera != null) ? sceneCamera.transform.forward : playerRoot.forward;
+        _lastBearingDeg = GeoFrame.BearingDegFromWorldForward(forward);
 
         CleanupSpawnProbe();
     }
@@ -330,8 +324,12 @@ public class SonusMapSceneController : MonoBehaviour
 
     private void Capture3DStateSnapshotAndLog()
     {
+        // Snapshot BEARING (not Unity yaw)
         if (playerRoot != null)
-            _lastPlayerYawDeg = playerRoot.eulerAngles.y;
+        {
+            Vector3 forward = (sceneCamera != null) ? sceneCamera.transform.forward : playerRoot.forward;
+            _lastBearingDeg = GeoFrame.BearingDegFromWorldForward(forward);
+        }
 
         double snapLat = SonusLocationState.Lat;
         double snapLon = SonusLocationState.Lng;
@@ -374,7 +372,8 @@ public class SonusMapSceneController : MonoBehaviour
             $"snap(lat,lon)=({snapLat:F6},{snapLon:F6}) " +
             $"state(lat,lon)=({stateLat:F6},{stateLon:F6}) " +
             $"marker(lat,lon)=({markerLat:F6},{markerLon:F6}) " +
-            $"mapCenter(lat,lon)=({mapLat:F6},{mapLon:F6})"
+            $"mapCenter(lat,lon)=({mapLat:F6},{mapLon:F6}) " +
+            $"bearingDeg={_lastBearingDeg:F1}"
         );
     }
 
@@ -390,15 +389,18 @@ public class SonusMapSceneController : MonoBehaviour
         double lng = SonusLocationState.Lng;
 
         _userMarker2D.location = new GeoPoint(lng, lat);
-        Apply2DMarkerYaw();
+        Apply2DMarkerRotation();
     }
 
-    private void Apply2DMarkerYaw()
+    private void Apply2DMarkerRotation()
     {
         if (!rotate2DMarkerWithPlayer) return;
         if (_userMarker2D == null) return;
 
-        float yaw = _lastPlayerYawDeg + markerYawOffsetDegrees;
-        _userMarker2D.rotation = yaw;
+        // OnlineMaps Marker2D.rotation expects TURNS (0..1) in our setup.
+        _userMarker2D.rotation = GeoFrame.Marker2DRotationTurns(
+            _lastBearingDeg,
+            markerIconOffsetDeg
+        );
     }
 }

@@ -510,6 +510,7 @@ GameObject:
   - component: {fileID: 636010311}
   - component: {fileID: 636010309}
   - component: {fileID: 636010308}
+  - component: {fileID: 636010316}
   m_Layer: 0
   m_Name: Map:3D
   m_TagString: Untagged
@@ -712,6 +713,30 @@ MonoBehaviour:
     _latitude: 0
     _longitude: 0
     _zoom: 3
+--- !u!114 &636010316
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 636010305}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 66bed52265efcda478c3636359ff8c20, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::DebugNorthProbeRenderer
+  map3D: {fileID: 636010315}
+  centerMode: 1
+  fixedLatitude: 37.3045
+  fixedLongitude: -80.6115
+  deltaDeg: 0.001
+  refreshSeconds: 0.25
+  drawContinuously: 1
+  enableHotkey: 1
+  drawOnceKey: 110
+  lineDuration: 0.25
+  lift: 0.5
+  drawNorthEast: 1
 --- !u!213 &717288656
 Sprite:
   m_ObjectHideFlags: 0
@@ -1106,6 +1131,26 @@ PrefabInstance:
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4459864850019384740, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      propertyPath: walkSpeed
+      value: 14.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 4459864850019384740, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      propertyPath: enableJump
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4459864850019384740, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      propertyPath: sprintSpeed
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 4459864850019384740, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      propertyPath: enableCrouch
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4459864850019384740, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      propertyPath: sprintDuration
+      value: 20
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384750, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_Name
@@ -1712,18 +1757,18 @@ MonoBehaviour:
   zoom2D: 17
   userMarkerTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
   userMarkerScale: 1
+  rotate2DMarkerWithPlayer: 1
+  markerIconOffsetDeg: 180
   map3D: {fileID: 636010315}
   map3DControl: {fileID: 636010312}
   sceneCamera: {fileID: 1003238716}
   playerRoot: {fileID: 1003238712}
   zoom3D: 16
   playerSpawnHeight: 2
-  debugMarkerPrefab: {fileID: 1577165980682188090, guid: 20af33bdb21f6534297f86a0572747d6, type: 3}
-  debugMarkerScale: 10
-  showDebugMarker: 1
-  tilesetLayerMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
+  useHiddenSpawnProbe: 1
+  geoMapperOL: {fileID: 1499806380}
+  debugLogGeoEachSecond: 1
+  debugLogSwitchSummary: 1
 --- !u!4 &1278132611
 Transform:
   m_ObjectHideFlags: 0
@@ -1962,6 +2007,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1499806379}
+  - component: {fileID: 1499806380}
   m_Layer: 0
   m_Name: Scene Mode
   m_TagString: Untagged
@@ -1986,6 +2032,24 @@ Transform:
   - {fileID: 1003238712}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1499806380
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1499806378}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47128f273d6e5a54c86b44af513ad197, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Core::OLMGeoMapper
+  map: {fileID: 636010315}
+  control3D: {fileID: 636010312}
+  sceneCamera: {fileID: 0}
+  yOffset: 1.8
+  screenSampleY01: 0.12
+  debugLogs: 0
 --- !u!1 &1661845403
 GameObject:
   m_ObjectHideFlags: 0
