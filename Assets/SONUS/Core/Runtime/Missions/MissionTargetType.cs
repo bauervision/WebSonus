@@ -1,0 +1,1 @@
+public enum MissionTargetType { Stationary, Dynamic }
