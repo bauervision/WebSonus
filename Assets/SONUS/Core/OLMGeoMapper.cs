@@ -82,18 +82,71 @@ public class OLMGeoMapper : MonoBehaviour, IGeoMapperReinitOL
         Init();
         if (control3D == null) return Vector3.zero;
 
+        // Ensure control has an active camera (some builds need this)
+        if (control3D.activeCamera == null && sceneCamera != null)
+            control3D.activeCamera = sceneCamera;
+
         // Online Maps commonly uses (lng, lat) order internally.
-        if (TryInvokeGetWorldPosition(control3D, lon, lat, out Vector3 world))
+        double lng = lon;
+
+        // 1) Prefer elevation-aware method when using tileset / dynamic mesh controls
+        if (TryInvokeGetWorldPositionWithElevation(control3D, lng, lat, out Vector3 worldE))
+        {
+            worldE.y += yOffset + extraYOffset;
+            return worldE;
+        }
+
+        // 2) Fallback: plain world position
+        if (TryInvokeGetWorldPosition(control3D, lng, lat, out Vector3 world))
         {
             world.y += yOffset + extraYOffset;
             return world;
         }
 
         if (debugLogs)
-            Debug.LogWarning("OLMGeoMapper.LatLonToWorld: could not resolve GetWorldPosition on this control.");
+            Debug.LogWarning("OLMGeoMapper.LatLonToWorld: could not resolve GetWorldPosition(WithElevation) on this control.");
 
         return Vector3.zero;
     }
+
+    private bool TryInvokeGetWorldPositionWithElevation(ControlBase3D control, double lng, double lat, out Vector3 world)
+    {
+        world = Vector3.zero;
+        var t = control.GetType();
+
+        // Vector3 GetWorldPositionWithElevation(double lng, double lat)
+        var m1 = t.GetMethod(
+            "GetWorldPositionWithElevation",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            null,
+            new[] { typeof(double), typeof(double) },
+            null
+        );
+
+        if (m1 != null && m1.ReturnType == typeof(Vector3))
+        {
+            world = (Vector3)m1.Invoke(control, new object[] { lng, lat });
+            return true;
+        }
+
+        // Vector3 GetWorldPositionWithElevation(float lng, float lat)
+        var m2 = t.GetMethod(
+            "GetWorldPositionWithElevation",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            null,
+            new[] { typeof(float), typeof(float) },
+            null
+        );
+
+        if (m2 != null && m2.ReturnType == typeof(Vector3))
+        {
+            world = (Vector3)m2.Invoke(control, new object[] { (float)lng, (float)lat });
+            return true;
+        }
+
+        return false;
+    }
+
 
     // ------------------------------------------------------
     // Preferred: feet-ish screen sample -> Lat/Lon
@@ -110,14 +163,28 @@ public class OLMGeoMapper : MonoBehaviour, IGeoMapperReinitOL
         Camera cam = control3D.activeCamera != null ? control3D.activeCamera : sceneCamera;
         if (cam == null) return false;
 
-        // bottom-center sample tends to represent “where the player is standing”
+        // Ensure the control has a camera (some builds need this set explicitly)
+        if (control3D.activeCamera == null && cam != null)
+            control3D.activeCamera = cam;
+
         Vector2 sp = new Vector2(cam.pixelWidth * 0.5f, cam.pixelHeight * screenSampleY01);
-        GeoPoint g = control3D.ScreenToLocation(sp);
+
+        GeoPoint g;
+        try
+        {
+            g = control3D.ScreenToLocation(sp);
+        }
+        catch (System.NullReferenceException)
+        {
+            // TileSetControl.HitTest can throw early while tileset/control is warming up.
+            if (debugLogs)
+                Debug.Log("[OLMGeoMapper] ScreenToLocation not ready yet (HitTest null). Will retry.");
+            return false;
+        }
 
         lat = g.latitude;
         lon = g.longitude;
 
-        // Reject invalid and “no data” (0,0) returns.
         if (!IsValidLatLon(lat, lon) || IsZeroZero(lat, lon))
         {
             if (_hasLastGood)

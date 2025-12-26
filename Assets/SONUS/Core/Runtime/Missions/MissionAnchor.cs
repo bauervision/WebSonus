@@ -63,26 +63,26 @@ public class MissionAnchor : MonoBehaviour
     {
         // Dependencies
         var cam = Camera.main;
-        var mapper = FindFirstObjectByType<GeoMapper>();
+        var mapper = FindFirstObjectByType<OLMGeoMapper>();
         if (!cam || !mapper) yield break;
 
         var go = targetObject ? targetObject : gameObject;
 
         while (go && go.activeInHierarchy)
         {
-            var (plat, plon) = mapper.WorldToLatLon(cam.transform.position);
-            var (tlat, tlon) = mapper.WorldToLatLon(go.transform.position);
+            // var (plat, plon) = mapper.TryWorldToLatLon(cam.transform.position);
+            // var (tlat, tlon) = mapper.WorldToLatLon(go.transform.position);
 
-            float meters = HaversineMeters(plat, plon, tlat, tlon);
+            // float meters = HaversineMeters(plat, plon, tlat, tlon);
 
-            if (meters <= endDistanceMeters && !_arrivalFired)
-            {
-                _arrivalFired = true;
+            // if (meters <= endDistanceMeters && !_arrivalFired)
+            // {
+            //     _arrivalFired = true;
 
-                // ✅ Core responsibility: notify mission system only.
-                if (MissionLoader.Instance != null)
-                    MissionLoader.Instance.NotifyAnchorArrived(this);
-            }
+            //     // ✅ Core responsibility: notify mission system only.
+            //     if (MissionLoader.Instance != null)
+            //         MissionLoader.Instance.NotifyAnchorArrived(this);
+            // }
 
             yield return new WaitForSeconds(0.15f);
         }

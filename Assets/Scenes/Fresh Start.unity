@@ -616,7 +616,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e1529146a0b52d840af074d904bea957, type: 3}
   m_Name: 
   m_EditorClassIdentifier: OnlineMaps::OnlineMaps.TileSetControl
-  activeCamera: {fileID: 0}
+  activeCamera: {fileID: 1003238716}
   elevationManager: {fileID: 0}
   marker2DMode: 0
   marker2DSize: 100
@@ -737,6 +737,56 @@ MonoBehaviour:
   lineDuration: 0.25
   lift: 0.5
   drawNorthEast: 1
+--- !u!1 &660818619
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 660818621}
+  - component: {fileID: 660818620}
+  m_Layer: 0
+  m_Name: OLM GeoMapper
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &660818620
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 660818619}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47128f273d6e5a54c86b44af513ad197, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Core::OLMGeoMapper
+  map: {fileID: 636010315}
+  control3D: {fileID: 636010312}
+  sceneCamera: {fileID: 1003238716}
+  yOffset: 1.8
+  screenSampleY01: 0.12
+  debugLogs: 0
+--- !u!4 &660818621
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 660818619}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 1545.2012, y: 0.00024, z: -1697.0706}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!213 &717288656
 Sprite:
   m_ObjectHideFlags: 0
@@ -1750,6 +1800,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Sonus.Web::SonusMapSceneController
   mapModeRoot: {fileID: 1661845403}
   sceneModeRoot: {fileID: 1499806378}
+  targetHunt: {fileID: 0}
   defaultLatitude: 37.3045
   defaultLongitude: -80.6115
   map2D: {fileID: 1243300615}
@@ -1766,9 +1817,9 @@ MonoBehaviour:
   zoom3D: 16
   playerSpawnHeight: 2
   useHiddenSpawnProbe: 1
-  geoMapperOL: {fileID: 1499806380}
-  debugLogGeoEachSecond: 1
-  debugLogSwitchSummary: 1
+  geoMapperOL: {fileID: 660818620}
+  debugLogGeoEachSecond: 0
+  debugLogSwitchSummary: 0
 --- !u!4 &1278132611
 Transform:
   m_ObjectHideFlags: 0
@@ -2007,7 +2058,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1499806379}
-  - component: {fileID: 1499806380}
   m_Layer: 0
   m_Name: Scene Mode
   m_TagString: Untagged
@@ -2032,24 +2082,71 @@ Transform:
   - {fileID: 1003238712}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1499806380
+--- !u!1 &1519239686
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1519239688}
+  - component: {fileID: 1519239689}
+  m_Layer: 0
+  m_Name: Target Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1519239688
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1519239686}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -112.78711, y: 0, z: -265.343}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1519239689
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1499806378}
+  m_GameObject: {fileID: 1519239686}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 47128f273d6e5a54c86b44af513ad197, type: 3}
+  m_Script: {fileID: 11500000, guid: f4ae24168e0a1554da4e51277f5770ad, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Sonus.Core::OLMGeoMapper
-  map: {fileID: 636010315}
-  control3D: {fileID: 636010312}
-  sceneCamera: {fileID: 0}
-  yOffset: 1.8
-  screenSampleY01: 0.12
-  debugLogs: 0
+  m_EditorClassIdentifier: Sonus.Web::TargetManager
+  sceneController: {fileID: 1278132610}
+  geoMapperOL: {fileID: 660818620}
+  playerRoot: {fileID: 1003238712}
+  targetPrefab: {fileID: 9218106670822114934, guid: e87ca062f5417ba42a6ae175e014d773, type: 3}
+  targetExtraYOffset: 0.2
+  targetMarkerTexture: {fileID: 2800000, guid: 6c99427791f954d42a62e008324dd607, type: 3}
+  targetMarkerScale: 1
+  spawnDistanceMeters: 300
+  spawnJitterMeters: 50
+  collectRadiusMeters: 3
+  debugLogs: 1
+  currentTarget:
+    _Alt: 0
+    _Dir: 0
+    _ID: 
+    _Name: 
+    _isActive: 0
+    _Lat: 0
+    _Lon: 0
+    _Time: 
+    _Type: 0
 --- !u!1 &1661845403
 GameObject:
   m_ObjectHideFlags: 0
@@ -2082,6 +2179,63 @@ Transform:
   - {fileID: 1243300616}
   - {fileID: 961739753}
   - {fileID: 1338090578}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2082714823
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2082714825}
+  - component: {fileID: 2082714824}
+  m_Layer: 0
+  m_Name: Mission System
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!114 &2082714824
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2082714823}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2064ed9982ee6ef49b9f4c2075672fe9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Core::MissionLoader
+  autoLoadMissionsOnStart: 1
+  autoStartFirstMissionOnStart: 1
+  targetPrefab: {fileID: 9218106670822114934, guid: e87ca062f5417ba42a6ae175e014d773, type: 3}
+  spawnedRoot: {fileID: 2082714825}
+  spawnExtraYOffsetMeters: 0
+  missionDefs: []
+  buildQuickMissionAroundPlayer: 1
+  quickTargetOffsetMeters: 180
+  quickMissionName: Quick Mission
+  hideInactiveAnchors: 1
+  missions: []
+  activeMissionIndex: -1
+  _activeAnchor: {fileID: 0}
+--- !u!4 &2082714825
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2082714823}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -112.7871, y: 0, z: -265.34293}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2116198337
@@ -2160,3 +2314,6 @@ SceneRoots:
   - {fileID: 1329251876}
   - {fileID: 501376885}
   - {fileID: 1278132611}
+  - {fileID: 2082714825}
+  - {fileID: 1519239688}
+  - {fileID: 660818621}

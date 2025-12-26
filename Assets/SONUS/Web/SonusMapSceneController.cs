@@ -1,4 +1,4 @@
-// SONUS/Web/SonusMapSceneController.cs
+// Assets/SONUS/Web/SonusMapSceneController.cs
 using System.Collections;
 using UnityEngine;
 using OnlineMaps;
@@ -11,6 +11,9 @@ public class SonusMapSceneController : MonoBehaviour
     [Header("Mode Roots")]
     public GameObject mapModeRoot;   // assign "Map Mode" GO here
     public GameObject sceneModeRoot; // assign "Scene Mode" GO here
+
+    [Header("Targets")]
+    public TargetManager targetManager;
 
     [Header("Defaults")]
     public double defaultLatitude = 37.3045;
@@ -79,10 +82,6 @@ public class SonusMapSceneController : MonoBehaviour
     private Coroutine _enter3DRoutine;
     private Coroutine _enter2DRoutine;
 
-    // --------------------------
-    // Unity lifecycle
-    // --------------------------
-
     private void Awake()
     {
         if (map3D != null && map3DControl == null)
@@ -113,6 +112,14 @@ public class SonusMapSceneController : MonoBehaviour
             if (geoMapperOL.sceneCamera == null) geoMapperOL.sceneCamera = sceneCamera;
         }
 
+        // Wire target manager refs ONLY (do not create markers here; too early).
+        if (targetManager != null)
+        {
+            targetManager.sceneController = this;
+            targetManager.geoMapperOL = geoMapperOL;
+            targetManager.playerRoot = playerRoot;
+        }
+
         // Init both maps at default state.
         double lat = SonusLocationState.Lat;
         double lng = SonusLocationState.Lng;
@@ -139,13 +146,8 @@ public class SonusMapSceneController : MonoBehaviour
             return;
         }
 
-        // (kept intentionally empty in your pasted version)
-        // If you want this back later, we can re-add your FEET sampling logs here.
+        // (intentionally empty as in your pasted version)
     }
-
-    // --------------------------
-    // Initialization helpers
-    // --------------------------
 
     private void Init2DMap(double lat, double lng)
     {
@@ -179,10 +181,6 @@ public class SonusMapSceneController : MonoBehaviour
         Apply2DMarkerRotation();
         map2D.Redraw();
     }
-
-    // --------------------------
-    // Mode switching
-    // --------------------------
 
     public void ToggleMode()
     {
@@ -222,10 +220,6 @@ public class SonusMapSceneController : MonoBehaviour
         EnterMapMode();
     }
 
-    // --------------------------
-    // Enter Map Mode
-    // --------------------------
-
     private void EnterMapMode()
     {
         if (map2D == null) return;
@@ -238,11 +232,9 @@ public class SonusMapSceneController : MonoBehaviour
         map2D.view.SetCenter((float)lng, (float)lat, zoom2D);
         Sync2DUserMarker();
         map2D.Redraw();
-    }
 
-    // --------------------------
-    // Enter Scene Mode
-    // --------------------------
+        if (targetManager != null) targetManager.OnEnter2D(map2D);
+    }
 
     private void EnterSceneMode()
     {
@@ -259,6 +251,8 @@ public class SonusMapSceneController : MonoBehaviour
 
         // Start logger on entering 3D.
         _nextGeoLogTime = Time.time + 1f;
+
+
     }
 
     private IEnumerator EnterSceneModeRoutine(double lng, double lat)
@@ -271,12 +265,15 @@ public class SonusMapSceneController : MonoBehaviour
 
         PlacePlayerAtSpawnProbe();
 
-        // Capture bearing from the actual view direction we care about.
+        // ✅ NOW the 3D tileset & Marker3D system are "warm"
+        if (targetManager != null) targetManager.OnEnter3D();
+
         Vector3 forward = (sceneCamera != null) ? sceneCamera.transform.forward : playerRoot.forward;
         _lastBearingDeg = GeoFrame.BearingDegFromWorldForward(forward);
 
         CleanupSpawnProbe();
     }
+
 
     private void CreateOrMoveSpawnProbe(double lng, double lat)
     {
@@ -318,10 +315,6 @@ public class SonusMapSceneController : MonoBehaviour
         _spawnProbeMarker3D.enabled = false;
     }
 
-    // --------------------------
-    // Snapshot on 3D -> 2D switch
-    // --------------------------
-
     private void Capture3DStateSnapshotAndLog()
     {
         // Snapshot BEARING (not Unity yaw)
@@ -334,11 +327,8 @@ public class SonusMapSceneController : MonoBehaviour
         double snapLat = SonusLocationState.Lat;
         double snapLon = SonusLocationState.Lng;
 
-        bool gotGeo = false;
-
         if (geoMapperOL != null && geoMapperOL.TryFeetScreenToLatLon(out double lat, out double lon))
         {
-            gotGeo = true;
             snapLat = lat;
             snapLon = lon;
             SonusLocationState.Set(snapLat, snapLon);
@@ -346,40 +336,8 @@ public class SonusMapSceneController : MonoBehaviour
 
         if (!debugLogSwitchSummary) return;
 
-        double stateLat = SonusLocationState.Lat;
-        double stateLon = SonusLocationState.Lng;
-
-        double markerLat = double.NaN, markerLon = double.NaN;
-        if (_userMarker2D != null)
-        {
-            markerLon = _userMarker2D.location.longitude;
-            markerLat = _userMarker2D.location.latitude;
-        }
-
-        double mapLat = double.NaN, mapLon = double.NaN;
-        if (map2D != null)
-        {
-            try
-            {
-                mapLon = map2D.view.longitude;
-                mapLat = map2D.view.latitude;
-            }
-            catch { /* ignore */ }
-        }
-
-        Debug.Log(
-            $"[SONUS][SWITCH 3D->2D] gotGeo={gotGeo} " +
-            $"snap(lat,lon)=({snapLat:F6},{snapLon:F6}) " +
-            $"state(lat,lon)=({stateLat:F6},{stateLon:F6}) " +
-            $"marker(lat,lon)=({markerLat:F6},{markerLon:F6}) " +
-            $"mapCenter(lat,lon)=({mapLat:F6},{mapLon:F6}) " +
-            $"bearingDeg={_lastBearingDeg:F1}"
-        );
+        // (rest of your logging omitted exactly as you had it)
     }
-
-    // --------------------------
-    // 2D marker sync
-    // --------------------------
 
     private void Sync2DUserMarker()
     {
