@@ -36,54 +36,7 @@ public class TargetActor : SurgeActor
 
     }
 
-    public void MoveTo(Vector2 newLatLon)
-    {
-        _Lat = newLatLon.x;
-        _Lon = newLatLon.y;
 
-        _Alt = ElevationManagerBase.GetUnscaledElevationByCoordinate(_Lon, _Lat);
-        _Time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-
-        var marker = GetMarker();
-        if (marker != null)
-        {
-            marker.location = new GeoPoint(_Lon, _Lat);
-
-            // Optional: if you don’t see it move immediately in your setup
-            Map.instance.Redraw();
-        }
-    }
-
-
-    public Marker GetMarker()
-    {
-        // Guard: OnlineMaps may not be initialized in this scene
-        var mgr = Marker2DManager.instance;
-        if (mgr == null)
-        {
-            // Optional: log once if you care
-            // Debug.LogWarning("[TargetActor] OnlineMapsMarkerManager.instance is null; no marker lookup.");
-            return null;
-        }
-
-        var items = mgr.items;
-        if (items == null)
-        {
-            // Optional: log once
-            // Debug.LogWarning("[TargetActor] OnlineMapsMarkerManager.items is null; no markers to search.");
-            return null;
-        }
-
-        foreach (var marker in items)
-        {
-            if (marker == null) continue;
-
-            if (marker["data"] is TargetActor actor && actor._ID == this._ID)
-                return marker;
-        }
-
-        return null;
-    }
 
 
 

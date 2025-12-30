@@ -3,6 +3,7 @@ using System.Collections;
 using UnityEngine;
 using OnlineMaps;
 using Sonus.Core;
+using System.Reflection;
 
 public class SonusMapSceneController : MonoBehaviour
 {
@@ -116,7 +117,7 @@ public class SonusMapSceneController : MonoBehaviour
         if (targetManager != null)
         {
             targetManager.sceneController = this;
-            targetManager.geoMapperOL = geoMapperOL;
+            // targetManager.geoMapperOL = geoMapperOL;
             targetManager.playerRoot = playerRoot;
         }
 
@@ -128,6 +129,11 @@ public class SonusMapSceneController : MonoBehaviour
         Ensure2DUserMarker(lng, lat);
 
         Init3DMap(lat, lng);
+
+        // Seed target immediately on 2D so player sees it on scene start
+        if (targetManager != null && map2D != null)
+            targetManager.OnEnter2D(map2D);
+
 
         SetMode(Mode.Map2D);
     }
@@ -148,6 +154,28 @@ public class SonusMapSceneController : MonoBehaviour
 
         // (intentionally empty as in your pasted version)
     }
+
+    private static void ForceMarker2DManagerInstance(Marker2DManager desired)
+    {
+        if (desired == null) return;
+
+        // Some OnlineMaps versions expose `instance` publicly, others keep it non-public.
+        var t = typeof(Marker2DManager);
+        var f = t.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+        if (f != null)
+        {
+            f.SetValue(null, desired);
+            return;
+        }
+
+        // Fallback: property form (rare)
+        var p = t.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+        if (p != null && p.CanWrite)
+        {
+            p.SetValue(null, desired, null);
+        }
+    }
+
 
     private void Init2DMap(double lat, double lng)
     {
@@ -246,14 +274,33 @@ public class SonusMapSceneController : MonoBehaviour
         map3D.view.SetCenter((float)lng, (float)lat, zoom3D);
         map3D.Redraw();
 
-        if (useHiddenSpawnProbe)
-            _enter3DRoutine = StartCoroutine(EnterSceneModeRoutine(lng, lat));
-
         // Start logger on entering 3D.
         _nextGeoLogTime = Time.time + 1f;
 
-
+        if (useHiddenSpawnProbe)
+        {
+            _enter3DRoutine = StartCoroutine(EnterSceneModeRoutine(lng, lat));
+        }
+        else
+        {
+            // No probe: still give the tileset/marker systems a couple frames to wake up,
+            // then let TargetManager create/sync its Marker3D.
+            _enter3DRoutine = StartCoroutine(EnterSceneModeNoProbeRoutine());
+        }
     }
+
+    private IEnumerator EnterSceneModeNoProbeRoutine()
+    {
+        // Let the 3D scene & map control settle
+        yield return null;
+        yield return null;
+
+        if (targetManager != null) targetManager.OnEnter3D();
+
+        Vector3 forward = (sceneCamera != null) ? sceneCamera.transform.forward : playerRoot.forward;
+        _lastBearingDeg = GeoFrame.BearingDegFromWorldForward(forward);
+    }
+
 
     private IEnumerator EnterSceneModeRoutine(double lng, double lat)
     {

@@ -1,68 +1,69 @@
 // Assets/SONUS/Web/TargetManager.cs
 using System.Collections;
+using System.Reflection;
 using UnityEngine;
 using OnlineMaps;
+using Sonus.Core;
 
 public class TargetManager : MonoBehaviour
 {
     [Header("Refs (from SonusMapSceneController)")]
     public SonusMapSceneController sceneController;
-    public OLMGeoMapper geoMapperOL;
-
-    [Tooltip("Player root used for distance checks in 3D")]
     public Transform playerRoot;
 
-    [Header("3D Visual")]
-    public GameObject targetPrefab;
-    public float targetExtraYOffset = 0.2f;
+    [Header("2D Wiring (assign in Inspector)")]
+    [Tooltip("Drag the Marker2DManager that belongs to the 2D map (Map Mode).")]
+    public Marker2DManager markerManager2D;
 
-    [Header("2D Visual")]
     public Texture2D targetMarkerTexture;
     public float targetMarkerScale = 1f;
 
-    [Header("Spawn / Collect")]
-    public float spawnDistanceMeters = 300f;
-    public float spawnJitterMeters = 50f;
-    public float collectRadiusMeters = 3f;
+    [Header("3D Wiring")]
+    [Tooltip("Prefab used by OnlineMaps Marker3D. Keep it small/simple.")]
+    public GameObject targetPrefab;
 
-    [Header("3D Placement Probe (OnlineMaps Marker3D)")]
-    [Tooltip("Recommended for tileset: use a hidden Marker3D to get elevation-aware world placement.")]
-    public bool useHiddenTargetProbe = true;
+    public float targetExtraYOffset = 0.2f;
+
+    [Header("Spawn")]
+    public float spawnDistanceMeters = 80f;
+    public float spawnJitterMeters = 10f;
+
+    [Header("Collect")]
+    public float collectRadiusMeters = 3f;
 
     [Header("Debug")]
     public bool debugLogs = true;
 
-    public TargetActor currentTarget;
+    // ✅ Do NOT let Unity serialize a default TargetActor (0,0) into the component
+    [System.NonSerialized] public TargetActor currentTarget;
 
     private Marker2D _marker2D;
-    private GameObject _targetGO;
+    private Marker3D _marker3D;
 
-    private Marker3D _targetProbeMarker3D;
-    private GameObject _targetProbePrefab;
-
-    private Coroutine _spawnRoutine;
+    private Coroutine _sync3DRoutine;
     private bool _isRespawning;
 
     private void Awake()
     {
         if (sceneController == null) sceneController = FindAny<SonusMapSceneController>();
-        if (geoMapperOL == null) geoMapperOL = FindAny<OLMGeoMapper>();
 
-        if (useHiddenTargetProbe && _targetProbePrefab == null)
-        {
-            _targetProbePrefab = new GameObject("TargetProbePrefab");
-            _targetProbePrefab.hideFlags = HideFlags.HideAndDontSave;
-            _targetProbePrefab.SetActive(false);
-        }
+        // ✅ Kill any inspector-serialized ghost target
+        currentTarget = null;
     }
 
     private void Update()
     {
-        // Only collect when 3D GO exists (i.e., in Scene3D)
-        if (_targetGO == null || playerRoot == null) return;
         if (_isRespawning) return;
+        if (playerRoot == null) return;
 
-        float d = Vector3.Distance(playerRoot.position, _targetGO.transform.position);
+        if (_marker3D == null || !_marker3D.enabled || _marker3D.transform == null) return;
+
+        Vector3 p = _marker3D.transform.position;
+        if (p == Vector3.zero) return;
+
+        p = new Vector3(p.x, p.y + targetExtraYOffset, p.z);
+
+        float d = Vector3.Distance(playerRoot.position, p);
         if (d <= collectRadiusMeters)
         {
             _isRespawning = true;
@@ -71,319 +72,201 @@ public class TargetManager : MonoBehaviour
         }
     }
 
-    // Called by SonusMapSceneController when switching modes
+    // ---------------------------
+    // Mode hooks
+    // ---------------------------
+
     public void OnEnter2D(Map map2D)
     {
-        if (debugLogs) Debug.Log("[TargetHunt] Enter 2D");
+        Ensure2DManagerSingleton();
 
-        Ensure2DMarker(map2D);
-        Sync2D(map2D);
+        EnsureTarget(map2D);
+        Recreate2DMarker();
 
-        // Optional: if you want targets ONLY in 3D physically, keep this.
-        Hide3D();
+        Set3DEnabled(false);
+        map2D?.Redraw();
+
+        if (debugLogs && map2D != null)
+        {
+            var c = map2D.view.center;
+            Debug.Log($"[TargetHunt] Enter2D center=({c.y:F6},{c.x:F6}) target=({currentTarget._Lat:F6},{currentTarget._Lon:F6})");
+        }
     }
 
     public void OnEnter3D()
     {
-        Debug.Log($"[TargetHunt] OnEnter3D called. geoMapperOL={(geoMapperOL != null)} control={(geoMapperOL != null && geoMapperOL.control3D != null)} active={(geoMapperOL != null && geoMapperOL.control3D != null && geoMapperOL.control3D.gameObject.activeInHierarchy)}");
+        if (debugLogs) Debug.Log("[TargetHunt] Enter3D");
 
-        if (debugLogs) Debug.Log("[TargetHunt] Enter 3D");
+        EnsureTarget(sceneController != null ? sceneController.map2D : null);
 
-        // Do NOT touch Marker2D here.
-        // Switching roots can invalidate marker internals; manage 2D marker only in OnEnter2D.
-
-        if (_spawnRoutine != null) StopCoroutine(_spawnRoutine);
-        _spawnRoutine = StartCoroutine(EnsureSpawnedAndPlaced3D());
+        if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
+        _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
     }
 
     // ---------------------------
-    // Spawn / Respawn
+    // Target
     // ---------------------------
 
-    private IEnumerator RespawnFlow()
+    private void EnsureTarget(Map map2D)
     {
-        // Clear 3D GO immediately (feels responsive)
-        Hide3D();
+        if (HasValidTarget()) return;
 
-        // Spawn a new target around the player (needs feet sample)
-        yield return StartCoroutine(SpawnAroundPlayerFeet());
+        // Base from state / center / defaults
+        double baseLat = SonusLocationState.Lat;
+        double baseLon = SonusLocationState.Lng;
 
-        // Place it in 3D (if still in 3D mode)
-        yield return StartCoroutine(EnsureSpawnedAndPlaced3D());
+        if ((baseLat == 0 && baseLon == 0) && map2D != null)
+        {
+            baseLon = map2D.view.center.x;
+            baseLat = map2D.view.center.y;
+        }
 
-        _isRespawning = false;
+        if ((baseLat == 0 && baseLon == 0) && sceneController != null)
+        {
+            baseLat = sceneController.defaultLatitude;
+            baseLon = sceneController.defaultLongitude;
+        }
+
+        // ✅ For now: deterministic offset so we ALWAYS get a visible target nearby.
+        // Later we can swap to GeoUtil.RandomPointAround once we trust it.
+        double tLat = baseLat + 0.001;
+        double tLon = baseLon + 0.001;
+
+        currentTarget = new TargetActor(TargetType.STATIONARY, tLat, tLon);
+        currentTarget._Name = "Target";
+
+        if (debugLogs)
+            Debug.Log($"[TargetHunt] Seed target=({currentTarget._Lat:F6},{currentTarget._Lon:F6}) from base=({baseLat:F6},{baseLon:F6})");
     }
 
-    private IEnumerator EnsureSpawnedAndPlaced3D()
+    private bool HasValidTarget()
     {
-        // Wait until player has been placed by the scene controller (prevents early probe zeros)
-        const float warmTimeout = 5f;
-        float tWarm0 = Time.realtimeSinceStartup;
-        while (playerRoot != null && playerRoot.position == Vector3.zero && Time.realtimeSinceStartup - tWarm0 < warmTimeout)
-            yield return null;
+        if (currentTarget == null) return false;
+        return !(System.Math.Abs(currentTarget._Lat) < 1e-9 && System.Math.Abs(currentTarget._Lon) < 1e-9);
+    }
 
+    // ---------------------------
+    // 2D marker (create-only)
+    // ---------------------------
 
-        // Need a target first
-        if (currentTarget == null)
-            yield return StartCoroutine(SpawnAroundPlayerFeet());
+    private void Recreate2DMarker()
+    {
+        if (targetMarkerTexture == null || currentTarget == null) return;
 
-        if (currentTarget == null)
+        Ensure2DManagerSingleton();
+        SafeRemove2DMarker();
+
+        _marker2D = Marker2DManager.CreateItem(currentTarget._Lon, currentTarget._Lat, targetMarkerTexture, "target");
+        if (_marker2D == null)
         {
-            Debug.LogWarning("[TargetHunt] No target to place (spawn failed).");
-            yield break;
+            Debug.LogWarning("[TargetHunt] 2D CreateItem returned null.");
+            return;
         }
 
-        Ensure3DGO();
+        _marker2D.align = Align.Center;
+        _marker2D.scale = targetMarkerScale;
+        _marker2D.enabled = true;
+        _marker2D["data"] = currentTarget;
 
-        // Preferred: elevation-aware placement via Marker3D probe
-        if (useHiddenTargetProbe)
-        {
-            yield return StartCoroutine(Place3DUsingMarkerProbe(currentTarget._Lon, currentTarget._Lat));
-            yield break;
-        }
+        if (debugLogs)
+            Debug.Log($"[TargetHunt] 2D marker created at ({currentTarget._Lat:F6},{currentTarget._Lon:F6}) using mgr='{Marker2DManager.instance?.gameObject.name}'");
+    }
 
-        // Fallback: try LatLonToWorld (best-effort)
-        if (geoMapperOL == null)
-        {
-            Debug.LogWarning("[TargetHunt] Missing geoMapperOL; cannot place target.");
-            yield break;
-        }
+    private void SafeRemove2DMarker()
+    {
+        if (_marker2D == null) return;
 
-        const float timeoutSec = 10f;
+        Ensure2DManagerSingleton();
+
+        try { Marker2DManager.RemoveItem(_marker2D); }
+        catch { try { _marker2D.enabled = false; } catch { } }
+
+        _marker2D = null;
+    }
+
+    // ---------------------------
+    // 3D marker
+    // ---------------------------
+
+    private IEnumerator Ensure3DMarkerAndSync()
+    {
+        if (currentTarget == null) yield break;
+
+        const float timeout = 10f;
         float t0 = Time.realtimeSinceStartup;
 
-        while (Time.realtimeSinceStartup - t0 < timeoutSec)
-        {
-            Vector3 w = geoMapperOL.LatLonToWorld(currentTarget._Lat, currentTarget._Lon, targetExtraYOffset);
-            if (w != Vector3.zero)
-            {
-                _targetGO.transform.position = w;
-                if (debugLogs) Debug.Log($"[TargetHunt] Placed 3D target at {w} (LatLonToWorld)");
-                yield break;
-            }
-
-            yield return new WaitForSeconds(0.1f);
-        }
-
-        Debug.LogWarning("[TargetHunt] Timed out placing target in 3D (LatLonToWorld stayed zero).");
-    }
-
-    private IEnumerator SpawnAroundPlayerFeet()
-    {
-        if (geoMapperOL == null)
-        {
-            Debug.LogWarning("[TargetHunt] SpawnAroundPlayerFeet: geoMapperOL is null.");
-            yield break;
-        }
-
-        const float timeoutSec = 8f;
-        float t0 = Time.realtimeSinceStartup;
-
-        while (Time.realtimeSinceStartup - t0 < timeoutSec)
-        {
-            if (geoMapperOL.TryFeetScreenToLatLon(out double playerLat, out double playerLon))
-            {
-                float d = spawnDistanceMeters + Random.Range(-spawnJitterMeters, spawnJitterMeters);
-                Vector2 latLon = GeoUtil.RandomPointAround(playerLat, playerLon, d);
-
-                currentTarget = new TargetActor(TargetType.STATIONARY, latLon.x, latLon.y);
-                currentTarget._Name = "Random Target";
-
-                if (debugLogs)
-                    Debug.Log($"[TargetHunt] Spawned target lat/lon=({currentTarget._Lat:F6},{currentTarget._Lon:F6}) ~{d:F0}m");
-
-                yield break;
-            }
-
-            yield return new WaitForSeconds(0.1f);
-        }
-
-        if (debugLogs) Debug.LogWarning("[TargetHunt] Could not get feet sample to spawn target.");
-    }
-
-    // ---------------------------
-    // 3D placement via Marker3D probe
-    // ---------------------------
-
-    private IEnumerator Place3DUsingMarkerProbe(double lng, double lat)
-    {
-        const float timeoutSec = 10f;
-        float t0 = Time.realtimeSinceStartup;
-
-        while (Marker3DManager.instance == null && Time.realtimeSinceStartup - t0 < timeoutSec)
+        while (Marker3DManager.instance == null && Time.realtimeSinceStartup - t0 < timeout)
             yield return null;
 
         if (Marker3DManager.instance == null)
         {
-            Debug.LogWarning("[TargetHunt] Marker3DManager.instance is null; cannot probe place target.");
+            Debug.LogWarning("[TargetHunt] Marker3DManager.instance is null.");
             yield break;
         }
 
-        CreateOrMoveTargetProbe(lng, lat);
-
-        // Give OnlineMaps a couple frames to apply elevation/placement.
-        yield return null;
-        yield return null;
-
-        if (_targetProbeMarker3D == null || _targetProbeMarker3D.transform == null)
+        if (_marker3D == null)
         {
-            Debug.LogWarning("[TargetHunt] Target probe marker missing transform.");
-            yield break;
-        }
-
-        Vector3 p = _targetProbeMarker3D.transform.position;
-
-        // If still not ready, wait a few more frames.
-        if (p == Vector3.zero)
-        {
-            if (debugLogs) Debug.LogWarning("[TargetHunt] Probe returned zero; waiting more frames...");
-            for (int i = 0; i < 15; i++)
+            if (targetPrefab == null)
             {
-                yield return null;
-                p = _targetProbeMarker3D.transform.position;
-                if (p != Vector3.zero) break;
-            }
-        }
-
-        if (p == Vector3.zero)
-        {
-            Debug.LogWarning("[TargetHunt] Probe never resolved a valid world position.");
-            CleanupTargetProbe();
-            yield break;
-        }
-
-        _targetGO.transform.position = new Vector3(p.x, p.y + targetExtraYOffset, p.z);
-
-        if (debugLogs) Debug.Log($"[TargetHunt] Placed 3D target at {_targetGO.transform.position} (Marker3D probe)");
-
-        CleanupTargetProbe();
-    }
-
-    private void CreateOrMoveTargetProbe(double lng, double lat)
-    {
-        if (_targetProbePrefab == null)
-        {
-            _targetProbePrefab = new GameObject("TargetProbePrefab");
-            _targetProbePrefab.hideFlags = HideFlags.HideAndDontSave;
-            _targetProbePrefab.SetActive(false);
-        }
-
-        if (_targetProbeMarker3D == null)
-        {
-            _targetProbeMarker3D = Marker3DManager.CreateItem(lng, lat, _targetProbePrefab, "target-probe");
-            if (_targetProbeMarker3D == null)
-            {
-                Debug.LogWarning("[TargetHunt] Failed to create Marker3D probe.");
-                return;
+                Debug.LogWarning("[TargetHunt] targetPrefab is null.");
+                yield break;
             }
 
-            _targetProbeMarker3D.sizeType = Marker3D.SizeType.scene;
+            _marker3D = Marker3DManager.CreateItem(0, 0, targetPrefab, "target-3d");
+            if (_marker3D == null)
+            {
+                Debug.LogWarning("[TargetHunt] 3D CreateItem returned null.");
+                yield break;
+            }
+
+            _marker3D.sizeType = Marker3D.SizeType.scene;
         }
 
-        _targetProbeMarker3D.enabled = true;
-        _targetProbeMarker3D.location = new GeoPoint(lng, lat);
-        _targetProbeMarker3D.Update();
+        _marker3D.location = new GeoPoint(currentTarget._Lon, currentTarget._Lat);
+        _marker3D.enabled = true;
+        _marker3D.Update();
+
+        // Let OM resolve transform
+        for (int i = 0; i < 10; i++) yield return null;
+
+        if (debugLogs && _marker3D.transform != null)
+            Debug.Log($"[TargetHunt] 3D marker pos={_marker3D.transform.position} target=({currentTarget._Lat:F6},{currentTarget._Lon:F6})");
     }
 
-    private void CleanupTargetProbe()
+    private void Set3DEnabled(bool enabled)
     {
-        if (_targetProbeMarker3D == null) return;
-        _targetProbeMarker3D.enabled = false;
-    }
-
-    // ---------------------------
-    // 2D marker
-    // ---------------------------
-
-    private void Ensure2DMarker(Map map2D)
-    {
-        if (map2D == null) return;
-        if (_marker2D != null) return;
-        if (targetMarkerTexture == null) return;
-
-        if (!targetMarkerTexture.isReadable)
-        {
-            Debug.LogWarning($"[TargetHunt] targetMarkerTexture '{targetMarkerTexture.name}' is not readable. Enable Read/Write in import settings.");
-            return;
-        }
-
-        try
-        {
-            _marker2D = Marker2DManager.CreateItem(0, 0, targetMarkerTexture, "target");
-            if (_marker2D == null) return;
-
-            _marker2D.align = Align.Center;
-            _marker2D.scale = targetMarkerScale;
-            _marker2D.enabled = true;
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogWarning($"[TargetHunt] Ensure2DMarker failed: {ex.GetType().Name}: {ex.Message}");
-            _marker2D = null;
-        }
-    }
-
-    private void Sync2D(Map map2D)
-    {
-        if (_marker2D == null) return;
-
-        if (currentTarget == null)
-        {
-            // Hide marker until we have a spawned target
-            SafeSetMarkerEnabled(false);
-            map2D?.Redraw();
-            return;
-        }
-
-        SafeSetMarkerEnabled(true);
-
-        _marker2D.location = new GeoPoint(currentTarget._Lon, currentTarget._Lat);
-
-        // Attach actor so your TargetActor.GetMarker() pattern can still work.
-        _marker2D["data"] = currentTarget;
-
-        map2D?.Redraw();
-    }
-
-    private void SafeSetMarkerEnabled(bool enabled)
-    {
-        if (_marker2D == null) return;
-        try
-        {
-            _marker2D.enabled = enabled;
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogWarning($"[TargetHunt] Marker2D became invalid; dropping ref. {ex.GetType().Name}: {ex.Message}");
-            _marker2D = null;
-        }
+        if (_marker3D == null) return;
+        _marker3D.enabled = enabled;
     }
 
     // ---------------------------
-    // 3D GO
+    // Singleton forcing (2D)
     // ---------------------------
 
-    private void Ensure3DGO()
+    private void Ensure2DManagerSingleton()
     {
-        if (_targetGO != null) return;
+        if (markerManager2D == null) return;
 
-        if (targetPrefab != null)
-        {
-            _targetGO = Instantiate(targetPrefab, transform); // ✅ child of TargetManager
-        }
-        else
-        {
-            _targetGO = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            _targetGO.transform.SetParent(transform, worldPositionStays: true);
-        }
-
-        _targetGO.name = "Target_World";
+        var t = typeof(Marker2DManager);
+        var f = t.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+        if (f != null) f.SetValue(null, markerManager2D);
     }
 
-    private void Hide3D()
+    // ---------------------------
+    // Respawn (simple)
+    // ---------------------------
+
+    private IEnumerator RespawnFlow()
     {
-        if (_targetGO != null) Destroy(_targetGO);
-        _targetGO = null;
+        Set3DEnabled(false);
+
+        currentTarget = null;
+        EnsureTarget(sceneController != null ? sceneController.map2D : null);
+
+        Recreate2DMarker();
+        yield return StartCoroutine(Ensure3DMarkerAndSync());
+
+        _isRespawning = false;
     }
 
     private static T FindAny<T>() where T : Object
