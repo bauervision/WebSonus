@@ -5,6 +5,21 @@ using UnityEngine;
 using OnlineMaps;
 using Sonus.Core;
 
+[System.Serializable]
+public struct PresetGeoPoint
+{
+    public double lat;
+    public double lon;
+
+    public PresetGeoPoint(double lat, double lon)
+    {
+        this.lat = lat;
+        this.lon = lon;
+    }
+
+    public override string ToString() => $"({lat:F6},{lon:F6})";
+}
+
 public class TargetManager : MonoBehaviour
 {
     [Header("Refs (from SonusMapSceneController)")]
@@ -28,8 +43,29 @@ public class TargetManager : MonoBehaviour
     public float spawnDistanceMeters = 80f;
     public float spawnJitterMeters = 10f;
 
-    [Header("Collect")]
-    public float collectRadiusMeters = 3f;
+
+    [Header("Preset Targets")]
+    public bool usePresetTargets = true;
+
+    public PresetGeoPoint[] presetTargets = new PresetGeoPoint[]
+    {
+    new(37.305458, -80.612394),
+    new(37.306329, -80.610859),
+    new (37.306515, -80.613209),
+    new (37.303756, -80.612456),
+    new (37.304914, -80.611766),
+    new (37.304215, -80.610174),
+    new (37.306193, -80.609963),
+    new (37.305381, -80.610454),
+    new (37.307287, -80.610910),
+    new (37.306878, -80.614156),
+    new (37.305340, -80.614054),
+    new (37.306148, -80.608554),
+    };
+
+
+    private int[] _presetBag;
+    private int _presetBagIndex;
 
     [Header("Debug")]
     public bool debugLogs = true;
@@ -64,13 +100,9 @@ public class TargetManager : MonoBehaviour
         p = new Vector3(p.x, p.y + targetExtraYOffset, p.z);
 
         float d = Vector3.Distance(playerRoot.position, p);
-        if (d <= collectRadiusMeters)
-        {
-            _isRespawning = true;
-            if (debugLogs) Debug.Log($"[TargetHunt] Collected at {d:F2}m");
-            StartCoroutine(RespawnFlow());
-        }
+
     }
+
 
     // ---------------------------
     // Mode hooks
@@ -127,13 +159,29 @@ public class TargetManager : MonoBehaviour
             baseLon = sceneController.defaultLongitude;
         }
 
-        // ✅ For now: deterministic offset so we ALWAYS get a visible target nearby.
-        // Later we can swap to GeoUtil.RandomPointAround once we trust it.
-        double tLat = baseLat + 0.001;
-        double tLon = baseLon + 0.001;
+        double tLat, tLon;
 
-        currentTarget = new TargetActor(TargetType.STATIONARY, tLat, tLon);
-        currentTarget._Name = "Target";
+        if (TryPickNextPreset(out tLat, out tLon))
+        {
+            if (debugLogs)
+                Debug.Log($"[TargetHunt] Using preset target=({tLat:F6},{tLon:F6})");
+        }
+        else
+        {
+            // Fallback: deterministic offset so we ALWAYS get a visible target nearby.
+            tLat = baseLat + 0.001;
+            tLon = baseLon + 0.001;
+
+            if (debugLogs)
+                Debug.Log($"[TargetHunt] Using fallback target=({tLat:F6},{tLon:F6}) from base=({baseLat:F6},{baseLon:F6})");
+        }
+
+
+
+        currentTarget = new TargetActor(TargetType.STATIONARY, tLat, tLon)
+        {
+            _Name = "Target"
+        };
 
         if (debugLogs)
             Debug.Log($"[TargetHunt] Seed target=({currentTarget._Lat:F6},{currentTarget._Lon:F6}) from base=({baseLat:F6},{baseLon:F6})");
@@ -153,7 +201,16 @@ public class TargetManager : MonoBehaviour
     {
         if (targetMarkerTexture == null || currentTarget == null) return;
 
+        // ✅ Only create 2D markers when the 2D map stack is actually active/ready.
+        if (!Is2DReady())
+        {
+            if (debugLogs)
+                Debug.Log("[TargetHunt] Skip 2D marker recreate: 2D map not active/ready.");
+            return;
+        }
+
         Ensure2DManagerSingleton();
+
         SafeRemove2DMarker();
 
         _marker2D = Marker2DManager.CreateItem(currentTarget._Lon, currentTarget._Lat, targetMarkerTexture, "target");
@@ -167,10 +224,22 @@ public class TargetManager : MonoBehaviour
         _marker2D.scale = targetMarkerScale;
         _marker2D.enabled = true;
         _marker2D["data"] = currentTarget;
-
-        if (debugLogs)
-            Debug.Log($"[TargetHunt] 2D marker created at ({currentTarget._Lat:F6},{currentTarget._Lon:F6}) using mgr='{Marker2DManager.instance?.gameObject.name}'");
     }
+
+
+    private bool Is2DReady()
+    {
+        if (markerManager2D == null) return false;
+        if (!markerManager2D.gameObject.activeInHierarchy) return false;
+
+        // OnlineMaps 2D manager must have a map reference and it must be active
+        if (markerManager2D.map == null) return false;
+        if (!markerManager2D.map.gameObject.activeInHierarchy) return false;
+
+        return true;
+    }
+
+
 
     private void SafeRemove2DMarker()
     {
@@ -245,12 +314,13 @@ public class TargetManager : MonoBehaviour
 
     private void Ensure2DManagerSingleton()
     {
-        if (markerManager2D == null) return;
+        if (!Is2DReady()) return;
 
         var t = typeof(Marker2DManager);
         var f = t.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-        if (f != null) f.SetValue(null, markerManager2D);
+        f?.SetValue(null, markerManager2D);
     }
+
 
     // ---------------------------
     // Respawn (simple)
@@ -263,11 +333,87 @@ public class TargetManager : MonoBehaviour
         currentTarget = null;
         EnsureTarget(sceneController != null ? sceneController.map2D : null);
 
+        // ✅ Only when 2D is active (Map Mode)
         Recreate2DMarker();
+
         yield return StartCoroutine(Ensure3DMarkerAndSync());
 
         _isRespawning = false;
     }
+
+
+
+
+
+    public bool TryGetTargetWorldPos(out Vector3 pos)
+    {
+        pos = default;
+        if (_marker3D == null || !_marker3D.enabled || _marker3D.transform == null) return false;
+
+        pos = _marker3D.transform.position;
+        return pos != Vector3.zero;
+    }
+
+    public void RequestRespawn()
+    {
+        if (_isRespawning) return;
+        _isRespawning = true;
+        StartCoroutine(RespawnFlow());
+    }
+
+
+
+
+    private void ResetPresetBag()
+    {
+        if (presetTargets == null || presetTargets.Length == 0)
+        {
+            _presetBag = null;
+            _presetBagIndex = 0;
+            return;
+        }
+
+        _presetBag = new int[presetTargets.Length];
+        for (int i = 0; i < _presetBag.Length; i++) _presetBag[i] = i;
+
+        // Fisher–Yates shuffle
+        for (int i = _presetBag.Length - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (_presetBag[i], _presetBag[j]) = (_presetBag[j], _presetBag[i]);
+        }
+
+        _presetBagIndex = 0;
+
+        if (debugLogs)
+            Debug.Log($"[TargetHunt] Preset bag reset ({presetTargets.Length} targets).");
+    }
+
+    private bool TryPickNextPreset(out double tLat, out double tLon)
+    {
+        tLat = tLon = 0;
+
+        if (!usePresetTargets) return false;
+        if (presetTargets == null || presetTargets.Length == 0) return false;
+
+        if (_presetBag == null || _presetBag.Length != presetTargets.Length) ResetPresetBag();
+        if (_presetBag == null || _presetBag.Length == 0) return false;
+
+        if (_presetBagIndex >= _presetBag.Length) ResetPresetBag();
+
+        int idx = _presetBag[_presetBagIndex++];
+        var p = presetTargets[idx];
+
+        tLat = p.lat;
+        tLon = p.lon;
+
+        return true;
+    }
+
+
+
+
+
 
     private static T FindAny<T>() where T : Object
     {

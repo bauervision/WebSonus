@@ -17,7 +17,7 @@ RenderSettings:
   m_Fog: 1
   m_FogColor: {r: 0.84549654, g: 0.9433962, b: 0.9433962, a: 1}
   m_FogMode: 3
-  m_FogDensity: 0.02
+  m_FogDensity: 0.0001
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
   m_AmbientSkyColor: {r: 0.2578616, g: 0.2578616, b: 0.2578616, a: 1}
@@ -37,7 +37,7 @@ RenderSettings:
   m_ReflectionBounces: 1
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
-  m_Sun: {fileID: 0}
+  m_Sun: {fileID: 203844588}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -94,7 +94,7 @@ LightmapSettings:
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
   m_LightingDataAsset: {fileID: 112000000, guid: a507f27a8964ea64190ad0e75a778db9, type: 2}
-  m_LightingSettings: {fileID: 0}
+  m_LightingSettings: {fileID: 4890085278179872738, guid: 9988c31b79f738b45858bdd6417c64b5, type: 2}
 --- !u!196 &4
 NavMeshSettings:
   serializedVersion: 2
@@ -622,7 +622,7 @@ MonoBehaviour:
   marker2DSize: 100
   marker3DManager: {fileID: 0}
   checkMarker2DVisibility: 0
-  drawingShader: {fileID: -6465566751694194690, guid: 896c4566c534d544085eac02e8d305d9, type: 3}
+  drawingShader: {fileID: 0}
   elevationResolution: 32
   markerMaterial: {fileID: 0}
   markerShader: {fileID: 4800000, guid: 650dd9526735d5b46b79224bc6e94025, type: 3}
@@ -633,7 +633,7 @@ MonoBehaviour:
   compressTextures: 0
   drawingMode: 0
   overlayFromParentTiles: 1
-  tileMaterial: {fileID: 0}
+  tileMaterial: {fileID: 2100000, guid: 18df8331db7274148a76b25abdc5b669, type: 2}
   tilesetShader: {fileID: 4800000, guid: e9c4d591d33ea3547a781b37788dc5b7, type: 3}
   _mipmapForTiles: 0
 --- !u!114 &636010313
@@ -1524,6 +1524,7 @@ GameObject:
   - component: {fileID: 1243300610}
   - component: {fileID: 1243300609}
   - component: {fileID: 1243300608}
+  - component: {fileID: 1243300617}
   m_Layer: 0
   m_Name: 'Map: 2D'
   m_TagString: Untagged
@@ -1769,6 +1770,23 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1661845404}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1243300617
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1243300607}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4fac8d1dfe19d284e9c7df343b6e376c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::MissionEditorMode
+  editorMode: 1
+  map: {fileID: 0}
+  logToConsole: 1
+  keepRuntimeList: 1
+  runtimePoints: []
 --- !u!1 &1278132609
 GameObject:
   m_ObjectHideFlags: 0
@@ -1912,7 +1930,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
-  m_AdditionalShaderChannelsFlag: 25
+  m_AdditionalShaderChannelsFlag: 27
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: 0
@@ -2092,6 +2110,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1519239688}
   - component: {fileID: 1519239689}
+  - component: {fileID: 1519239690}
   m_Layer: 0
   m_Name: Target Manager
   m_TagString: Untagged
@@ -2130,13 +2149,60 @@ MonoBehaviour:
   playerRoot: {fileID: 1003238712}
   markerManager2D: {fileID: 1243300613}
   targetMarkerTexture: {fileID: 2800000, guid: 3c6de7b00b0c67645bbd3d6f600dca05, type: 3}
-  targetMarkerScale: 1
-  targetPrefab: {fileID: 9218106670822114934, guid: e87ca062f5417ba42a6ae175e014d773, type: 3}
+  targetMarkerScale: 0.23
+  targetPrefab: {fileID: 2014764952472726877, guid: f1e4617076ac09b4e835074ac29bc0c7, type: 3}
   targetExtraYOffset: 0.2
-  spawnDistanceMeters: 300
-  spawnJitterMeters: 50
-  collectRadiusMeters: 3
+  spawnDistanceMeters: 80
+  spawnJitterMeters: 10
+  usePresetTargets: 1
+  presetTargets:
+  - lat: 37.305458
+    lon: -80.612394
+  - lat: 37.306329
+    lon: -80.610859
+  - lat: 37.306515
+    lon: -80.613209
+  - lat: 37.303756
+    lon: -80.612456
+  - lat: 37.304914
+    lon: -80.611766
+  - lat: 37.304215
+    lon: -80.610174
+  - lat: 37.306193
+    lon: -80.609963
+  - lat: 37.305381
+    lon: -80.610454
+  - lat: 37.307287
+    lon: -80.61091
+  - lat: 37.306878
+    lon: -80.614156
+  - lat: 37.30534
+    lon: -80.614054
+  - lat: 37.306148
+    lon: -80.608554
   debugLogs: 1
+--- !u!114 &1519239690
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1519239686}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11f4ff82714f61b4ebefc406d8f368f5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::ARTargetReticleController
+  targetManager: {fileID: 1519239689}
+  arCamera: {fileID: 1003238716}
+  canvas: {fileID: 1329251875}
+  reticlePrefab: {fileID: 1191688634527290521, guid: f1e4617076ac09b4e835074ac29bc0c7, type: 3}
+  reticleScale: 1
+  arModeEnabled: 1
+  foundRadiusMeters: 20
+  maxShowDistanceMeters: 1000
+  showDistanceLabel: 1
+  foundText: FOUND
 --- !u!1 &1661845403
 GameObject:
   m_ObjectHideFlags: 0
