@@ -37,32 +37,54 @@ public class TargetManager : MonoBehaviour
     [Tooltip("Prefab used by OnlineMaps Marker3D. Keep it small/simple.")]
     public GameObject targetPrefab;
 
+    [Tooltip("Extra Y offset for distance checks (world units).")]
     public float targetExtraYOffset = 0.2f;
 
-    [Header("Spawn")]
-    public float spawnDistanceMeters = 80f;
-    public float spawnJitterMeters = 10f;
+    [Header("3D Visual Offset")]
+    [Tooltip("Extra Y offset applied to the 3D marker transform AFTER OnlineMaps places it. Can be negative.")]
+    public float targetVisualYOffset = 0f;
 
+    [Header("Patrol")]
+    public bool enablePatrol = true;
+    public TargetPatrolManager patrolManager;
+
+    [Tooltip("Meters for each patrol leg (Start->A, Start->B radius).")]
+    public float patrolLegMeters = 100f;
+
+    [Tooltip("Meters/sec along patrol path.")]
+    public float patrolSpeedMps = 1.25f;
+
+    [Header("Found / Arrival")]
+    public bool enableArrivalRespawn = true;
+    public float foundRadiusMeters = 20f;
+    public float foundCooldownSeconds = 2f;
+
+    private float _nextFoundAllowedTime;
+
+    [Header("2D Motion / Redraw")]
+    [Tooltip("How often to redraw the 2D map while the target is moving.")]
+    public float map2DRedrawHz = 12f;
+
+    private float _next2DRedrawTime;
 
     [Header("Preset Targets")]
     public bool usePresetTargets = true;
 
     public PresetGeoPoint[] presetTargets = new PresetGeoPoint[]
     {
-    new(37.305458, -80.612394),
-    new(37.306329, -80.610859),
-    new (37.306515, -80.613209),
-    new (37.303756, -80.612456),
-    new (37.304914, -80.611766),
-    new (37.304215, -80.610174),
-    new (37.306193, -80.609963),
-    new (37.305381, -80.610454),
-    new (37.307287, -80.610910),
-    new (37.306878, -80.614156),
-    new (37.305340, -80.614054),
-    new (37.306148, -80.608554),
+        new(37.305458, -80.612394),
+        new(37.306329, -80.610859),
+        new(37.306515, -80.613209),
+        new(37.303756, -80.612456),
+        new(37.304914, -80.611766),
+        new(37.304215, -80.610174),
+        new(37.306193, -80.609963),
+        new(37.305381, -80.610454),
+        new(37.307287, -80.610910),
+        new(37.306878, -80.614156),
+        new(37.305340, -80.614054),
+        new(37.306148, -80.608554),
     };
-
 
     private int[] _presetBag;
     private int _presetBagIndex;
@@ -77,7 +99,14 @@ public class TargetManager : MonoBehaviour
     private Marker3D _marker3D;
 
     private Coroutine _sync3DRoutine;
+    private Coroutine _recreate2DRoutine;
+
     private bool _isRespawning;
+    private bool _in2DMode;
+
+    // Marker3D lifecycle safety
+    private bool _marker3DReady;
+    private float _next3DResyncAllowedTime;
 
     private void Awake()
     {
@@ -85,24 +114,86 @@ public class TargetManager : MonoBehaviour
 
         // ✅ Kill any inspector-serialized ghost target
         currentTarget = null;
+
+        if (patrolManager == null) patrolManager = GetComponent<TargetPatrolManager>();
+        if (patrolManager != null)
+        {
+            patrolManager.legMeters = patrolLegMeters;
+            patrolManager.speedMps = patrolSpeedMps;
+        }
     }
 
     private void Update()
     {
         if (_isRespawning) return;
-        if (playerRoot == null) return;
 
+        // We want patrol to run even in 2D so the icon moves on the 2D map.
+        if (enablePatrol && patrolManager != null && HasValidTarget())
+        {
+            // Keep patrol settings live-tunable
+            patrolManager.legMeters = patrolLegMeters;
+            patrolManager.speedMps = patrolSpeedMps;
+
+            if (patrolManager.Tick(Time.deltaTime, out double lat, out double lon))
+            {
+                currentTarget._Lat = lat;
+                currentTarget._Lon = lon;
+
+                // Push into 3D marker if active AND ready (prevents OM NRE)
+                if (_marker3DReady && _marker3D != null && _marker3D.enabled)
+                {
+                    try
+                    {
+                        _marker3D.location = new GeoPoint(lon, lat);
+                        _marker3D.Update();
+                    }
+                    catch
+                    {
+                        // OM can throw if 3D stack isn't fully alive yet; self-heal.
+                        _marker3DReady = false;
+
+                        if (Time.time >= _next3DResyncAllowedTime)
+                        {
+                            _next3DResyncAllowedTime = Time.time + 1.0f;
+                            if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
+                            _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
+                        }
+                    }
+                }
+
+                // Push into 2D marker if it exists/ready
+                Update2DMarkerLocationSafe(lon, lat);
+            }
+        }
+
+        // Arrival / found should be based on 3D world position (elevation-aware).
+        // If 3D marker isn't active, do nothing (we don't want 2D-only "found").
+        if (!enableArrivalRespawn) return;
+        if (playerRoot == null) return;
         if (_marker3D == null || !_marker3D.enabled || _marker3D.transform == null) return;
 
         Vector3 p = _marker3D.transform.position;
         if (p == Vector3.zero) return;
 
-        p = new Vector3(p.x, p.y + targetExtraYOffset, p.z);
+        // NOTE: do NOT write to marker transform each frame here (OM may also move it).
+        // Instead, apply offsets only for the measurement.
+        float yVisual = targetVisualYOffset;
+        float yExtra = targetExtraYOffset;
 
-        float d = Vector3.Distance(playerRoot.position, p);
+        Vector3 measure = new Vector3(p.x, p.y + yVisual + yExtra, p.z);
 
+        float d = Vector3.Distance(playerRoot.position, measure);
+
+        if (Time.time >= _nextFoundAllowedTime && d <= foundRadiusMeters)
+        {
+            _nextFoundAllowedTime = Time.time + foundCooldownSeconds;
+
+            if (debugLogs)
+                Debug.Log($"[TargetHunt] FOUND (d={d:F1}m) -> respawn");
+
+            RequestRespawn();
+        }
     }
-
 
     // ---------------------------
     // Mode hooks
@@ -110,15 +201,19 @@ public class TargetManager : MonoBehaviour
 
     public void OnEnter2D(Map map2D)
     {
-        Ensure2DManagerSingleton();
+        _in2DMode = true;
 
         EnsureTarget(map2D);
-        Recreate2DMarker();
 
+        // Never create 2D markers immediately on mode switch; OnlineMaps may not be initialized yet.
+        Kick2DMarkerCreateIf2DActive();
+
+        // Do NOT disable Marker3D via OM here (can NRE during teardown). Just hide GO safely.
         Set3DEnabled(false);
+
         map2D?.Redraw();
 
-        if (debugLogs && map2D != null)
+        if (debugLogs && map2D != null && currentTarget != null)
         {
             var c = map2D.view.center;
             Debug.Log($"[TargetHunt] Enter2D center=({c.y:F6},{c.x:F6}) target=({currentTarget._Lat:F6},{currentTarget._Lon:F6})");
@@ -127,9 +222,14 @@ public class TargetManager : MonoBehaviour
 
     public void OnEnter3D()
     {
+        _in2DMode = false;
+
         if (debugLogs) Debug.Log("[TargetHunt] Enter3D");
 
         EnsureTarget(sceneController != null ? sceneController.map2D : null);
+
+        // Make sure the marker GO is allowed to render before we sync
+        Set3DEnabled(true);
 
         if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
         _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
@@ -176,12 +276,18 @@ public class TargetManager : MonoBehaviour
                 Debug.Log($"[TargetHunt] Using fallback target=({tLat:F6},{tLon:F6}) from base=({baseLat:F6},{baseLon:F6})");
         }
 
-
-
         currentTarget = new TargetActor(TargetType.STATIONARY, tLat, tLon)
         {
             _Name = "Target"
         };
+
+        // Seed patrol route immediately so 2D shows motion from the start.
+        if (enablePatrol && patrolManager != null)
+        {
+            patrolManager.legMeters = patrolLegMeters;
+            patrolManager.speedMps = patrolSpeedMps;
+            patrolManager.AssignRoute(currentTarget._Lat, currentTarget._Lon);
+        }
 
         if (debugLogs)
             Debug.Log($"[TargetHunt] Seed target=({currentTarget._Lat:F6},{currentTarget._Lon:F6}) from base=({baseLat:F6},{baseLon:F6})");
@@ -194,61 +300,130 @@ public class TargetManager : MonoBehaviour
     }
 
     // ---------------------------
-    // 2D marker (create-only)
+    // 2D marker (safe create + update)
     // ---------------------------
 
-    private void Recreate2DMarker()
+    private void Kick2DMarkerCreateIf2DActive()
     {
-        if (targetMarkerTexture == null || currentTarget == null) return;
+        if (_recreate2DRoutine != null) StopCoroutine(_recreate2DRoutine);
+        _recreate2DRoutine = StartCoroutine(Recreate2DMarkerWhenReady());
+    }
 
-        // ✅ Only create 2D markers when the 2D map stack is actually active/ready.
-        if (!Is2DReady())
-        {
-            if (debugLogs)
-                Debug.Log("[TargetHunt] Skip 2D marker recreate: 2D map not active/ready.");
-            return;
-        }
+    private void Update2DMarkerLocationSafe(double lon, double lat)
+    {
+        if (_marker2D == null) return;
+        if (!_in2DMode) return; // only redraw when user is looking at 2D
+        if (!Is2DReady()) return;
 
         Ensure2DManagerSingleton();
 
-        SafeRemove2DMarker();
+        _marker2D.location = new GeoPoint(lon, lat);
 
-        _marker2D = Marker2DManager.CreateItem(currentTarget._Lon, currentTarget._Lat, targetMarkerTexture, "target");
-        if (_marker2D == null)
+        if (markerManager2D != null && markerManager2D.map != null && Time.time >= _next2DRedrawTime)
         {
-            Debug.LogWarning("[TargetHunt] 2D CreateItem returned null.");
-            return;
+            _next2DRedrawTime = Time.time + (1f / Mathf.Max(1f, map2DRedrawHz));
+            markerManager2D.map.Redraw();
         }
-
-        _marker2D.align = Align.Center;
-        _marker2D.scale = targetMarkerScale;
-        _marker2D.enabled = true;
-        _marker2D["data"] = currentTarget;
     }
-
 
     private bool Is2DReady()
     {
         if (markerManager2D == null) return false;
         if (!markerManager2D.gameObject.activeInHierarchy) return false;
 
-        // OnlineMaps 2D manager must have a map reference and it must be active
-        if (markerManager2D.map == null) return false;
-        if (!markerManager2D.map.gameObject.activeInHierarchy) return false;
+        var map = markerManager2D.map;
+        if (map == null) return false;
+        if (!map.gameObject.activeInHierarchy) return false;
+
+        // Must have a 2D control and it must be active/enabled
+        var ctrl = map.control;
+        if (ctrl == null) return false;
+        if (!ctrl.enabled) return false;
+        if (!ctrl.gameObject.activeInHierarchy) return false;
 
         return true;
     }
 
+    private IEnumerator Recreate2DMarkerWhenReady()
+    {
+        // If we aren't actually in 2D mode anymore, don't create 2D markers.
+        if (!_in2DMode) yield break;
 
+        // OnlineMaps often needs EndOfFrame to initialize marker buffers after re-activation
+        yield return null;
+        yield return new WaitForEndOfFrame();
+        yield return null;
+        yield return new WaitForEndOfFrame();
+
+        float timeout = 3.0f;
+        float t0 = Time.realtimeSinceStartup;
+
+        while (_in2DMode && !Is2DReady() && (Time.realtimeSinceStartup - t0) < timeout)
+            yield return null;
+
+        if (!_in2DMode) yield break;
+
+        if (!Is2DReady())
+        {
+            if (debugLogs) Debug.LogWarning("[TargetHunt] 2D not ready; skipping marker create.");
+            yield break;
+        }
+
+        if (targetMarkerTexture == null || currentTarget == null)
+        {
+            if (debugLogs) Debug.LogWarning("[TargetHunt] Missing texture or target; cannot create 2D marker.");
+            yield break;
+        }
+
+        Ensure2DManagerSingleton();
+
+        // Remove prior marker
+        SafeRemove2DMarker();
+
+        try
+        {
+            _marker2D = Marker2DManager.CreateItem(
+                currentTarget._Lon,
+                currentTarget._Lat,
+                targetMarkerTexture,
+                "target"
+            );
+
+            if (_marker2D == null)
+            {
+                Debug.LogWarning("[TargetHunt] 2D CreateItem returned null.");
+                yield break;
+            }
+
+            _marker2D.align = Align.Center;
+            _marker2D.scale = targetMarkerScale;
+            _marker2D.enabled = true;
+            _marker2D["data"] = currentTarget;
+
+            markerManager2D.map?.Redraw();
+
+            if (debugLogs)
+                Debug.Log($"[TargetHunt] 2D marker created @ ({currentTarget._Lat:F6},{currentTarget._Lon:F6})");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning($"[TargetHunt] 2D CreateItem exception: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
 
     private void SafeRemove2DMarker()
     {
         if (_marker2D == null) return;
 
-        Ensure2DManagerSingleton();
-
-        try { Marker2DManager.RemoveItem(_marker2D); }
-        catch { try { _marker2D.enabled = false; } catch { } }
+        try
+        {
+            Ensure2DManagerSingleton();
+            Marker2DManager.RemoveItem(_marker2D);
+        }
+        catch
+        {
+            try { _marker2D.enabled = false; } catch { }
+        }
 
         _marker2D = null;
     }
@@ -260,6 +435,8 @@ public class TargetManager : MonoBehaviour
     private IEnumerator Ensure3DMarkerAndSync()
     {
         if (currentTarget == null) yield break;
+
+        _marker3DReady = false;
 
         const float timeout = 10f;
         float t0 = Time.realtimeSinceStartup;
@@ -291,21 +468,54 @@ public class TargetManager : MonoBehaviour
             _marker3D.sizeType = Marker3D.SizeType.scene;
         }
 
+        // Ensure the marker GO is visible (safe) before update
+        if (_marker3D.transform != null)
+            _marker3D.transform.gameObject.SetActive(true);
+
         _marker3D.location = new GeoPoint(currentTarget._Lon, currentTarget._Lat);
-        _marker3D.enabled = true;
-        _marker3D.Update();
+
+        // Only set enabled when turning ON (disabling via enabled can throw in some OM lifecycles)
+        try { _marker3D.enabled = true; } catch { }
+
+        try
+        {
+            _marker3D.Update();
+        }
+        catch
+        {
+            if (debugLogs) Debug.LogWarning("[TargetHunt] Marker3D.Update threw during sync; will retry next Enter3D.");
+            yield break;
+        }
 
         // Let OM resolve transform
         for (int i = 0; i < 10; i++) yield return null;
 
-        if (debugLogs && _marker3D.transform != null)
+        _marker3DReady = (_marker3D != null && _marker3D.enabled && _marker3D.transform != null);
+
+        if (debugLogs && _marker3D != null && _marker3D.transform != null)
             Debug.Log($"[TargetHunt] 3D marker pos={_marker3D.transform.position} target=({currentTarget._Lat:F6},{currentTarget._Lon:F6})");
     }
 
     private void Set3DEnabled(bool enabled)
     {
         if (_marker3D == null) return;
-        _marker3D.enabled = enabled;
+
+        try
+        {
+            // Prefer toggling the marker instance GO over Marker3D.enabled, because enabled can NRE during mode teardown.
+            if (_marker3D.transform != null)
+                _marker3D.transform.gameObject.SetActive(enabled);
+
+            // Only toggle enabled when turning ON. Turning OFF via enabled has NRE'd for you.
+            if (enabled)
+                _marker3D.enabled = true;
+        }
+        catch
+        {
+            // OM may be mid-teardown; ignore and let next Enter3D resync.
+        }
+
+        if (!enabled) _marker3DReady = false;
     }
 
     // ---------------------------
@@ -314,40 +524,52 @@ public class TargetManager : MonoBehaviour
 
     private void Ensure2DManagerSingleton()
     {
-        if (!Is2DReady()) return;
+        // NOTE: Do not require Is2DReady here; we call this only when we already validated readiness.
+        if (markerManager2D == null) return;
 
         var t = typeof(Marker2DManager);
         var f = t.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
         f?.SetValue(null, markerManager2D);
     }
 
-
     // ---------------------------
-    // Respawn (simple)
+    // Respawn
     // ---------------------------
 
     private IEnumerator RespawnFlow()
     {
+        // Hide 3D marker safely (don't disable via OM)
         Set3DEnabled(false);
 
         currentTarget = null;
         EnsureTarget(sceneController != null ? sceneController.map2D : null);
 
-        // ✅ Only when 2D is active (Map Mode)
-        Recreate2DMarker();
+        // Re-arm patrol route for the new target
+        if (enablePatrol && patrolManager != null && HasValidTarget())
+            patrolManager.AssignRoute(currentTarget._Lat, currentTarget._Lon);
 
-        yield return StartCoroutine(Ensure3DMarkerAndSync());
+        // If we're in 2D, re-create marker safely (deferred). If we're in 3D, leave 2D alone.
+        if (_in2DMode)
+            Kick2DMarkerCreateIf2DActive();
+
+        // If we're in 3D, resync the 3D marker
+        if (!_in2DMode)
+        {
+            if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
+            _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
+        }
+
+        // Give marker sync a moment (non-blocking) — avoids reticle flicker on instant respawn
+        yield return null;
 
         _isRespawning = false;
     }
 
-
-
-
-
     public bool TryGetTargetWorldPos(out Vector3 pos)
     {
         pos = default;
+
+        if (!_marker3DReady) return false;
         if (_marker3D == null || !_marker3D.enabled || _marker3D.transform == null) return false;
 
         pos = _marker3D.transform.position;
@@ -361,8 +583,9 @@ public class TargetManager : MonoBehaviour
         StartCoroutine(RespawnFlow());
     }
 
-
-
+    // ---------------------------
+    // Preset bag
+    // ---------------------------
 
     private void ResetPresetBag()
     {
@@ -409,11 +632,6 @@ public class TargetManager : MonoBehaviour
 
         return true;
     }
-
-
-
-
-
 
     private static T FindAny<T>() where T : Object
     {

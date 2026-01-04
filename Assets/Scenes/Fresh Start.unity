@@ -2111,6 +2111,7 @@ GameObject:
   - component: {fileID: 1519239688}
   - component: {fileID: 1519239689}
   - component: {fileID: 1519239690}
+  - component: {fileID: 1519239691}
   m_Layer: 0
   m_Name: Target Manager
   m_TagString: Untagged
@@ -2152,8 +2153,15 @@ MonoBehaviour:
   targetMarkerScale: 0.23
   targetPrefab: {fileID: 2014764952472726877, guid: f1e4617076ac09b4e835074ac29bc0c7, type: 3}
   targetExtraYOffset: 0.2
-  spawnDistanceMeters: 80
-  spawnJitterMeters: 10
+  targetVisualYOffset: 0
+  enablePatrol: 1
+  patrolManager: {fileID: 1519239691}
+  patrolLegMeters: 100
+  patrolSpeedMps: 1.25
+  enableArrivalRespawn: 1
+  foundRadiusMeters: 20
+  foundCooldownSeconds: 2
+  map2DRedrawHz: 10
   usePresetTargets: 1
   presetTargets:
   - lat: 37.305458
@@ -2180,7 +2188,7 @@ MonoBehaviour:
     lon: -80.614054
   - lat: 37.306148
     lon: -80.608554
-  debugLogs: 1
+  debugLogs: 0
 --- !u!114 &1519239690
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2203,6 +2211,22 @@ MonoBehaviour:
   maxShowDistanceMeters: 1000
   showDistanceLabel: 1
   foundText: FOUND
+--- !u!114 &1519239691
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1519239686}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0c44d3caeaca4b439a910813e9de723, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::TargetPatrolManager
+  legMeters: 100
+  speedMps: 1.25
+  dwellSeconds: 0
+  debugLogs: 0
 --- !u!1 &1661845403
 GameObject:
   m_ObjectHideFlags: 0

@@ -61,10 +61,9 @@ public class ARTargetReticleController : MonoBehaviour
         if (d <= foundRadiusMeters)
         {
             if (_label != null) _label.text = foundText;
-            // Trigger respawn (and let TargetManager handle everything)
-            targetManager.RequestRespawn();
-            return;
+            return; // TargetManager handles respawn now
         }
+
 
         if (_label != null && showDistanceLabel)
             _label.text = FormatDistance(d);
