@@ -86,6 +86,24 @@ public class TargetManager : MonoBehaviour
         new(37.306148, -80.608554),
     };
 
+    [Header("Preset Selection")]
+    public bool firstTargetRandomThenClosest = true;
+
+    [Tooltip("If true, we won't immediately re-use the exact last preset index.")]
+    public bool avoidImmediateRepeat = true;
+
+    private bool _hasPickedFirstTarget;
+    private int _lastPresetIndex = -1;
+
+    [Header("Local Presets (auto-generate)")]
+    public bool autoGeneratePresetsNearPlayer = true;
+    public int autoPresetCount = 12;
+    public float autoPresetRadiusMeters = 450f; // how far out the cloud spreads
+    public float autoPresetMinRadiusMeters = 120f; // keep them from clustering on top of you
+    public int autoPresetSeed = 0; // 0 = random each run; set a number for repeatable
+
+
+
     private int[] _presetBag;
     private int _presetBagIndex;
 
@@ -203,6 +221,7 @@ public class TargetManager : MonoBehaviour
     {
         _in2DMode = true;
 
+        EnsureLocalPresetTargets(map2D);
         EnsureTarget(map2D);
 
         // Never create 2D markers immediately on mode switch; OnlineMaps may not be initialized yet.
@@ -238,6 +257,68 @@ public class TargetManager : MonoBehaviour
     // ---------------------------
     // Target
     // ---------------------------
+
+
+    private void EnsureLocalPresetTargets(Map map2D)
+    {
+        if (!autoGeneratePresetsNearPlayer) return;
+        if (presetTargets != null && presetTargets.Length > 0 && _hasPickedFirstTarget) return;
+        // (optional) don’t regenerate mid-run once you’ve started picking.
+
+        if (!TryGetPlayerLatLon(out double lat0, out double lon0))
+        {
+            // Fallback to map center if needed
+            if (map2D != null)
+            {
+                lon0 = map2D.view.center.x;
+                lat0 = map2D.view.center.y;
+            }
+        }
+
+        if (System.Math.Abs(lat0) < 1e-9 && System.Math.Abs(lon0) < 1e-9) return;
+
+        var rng = (autoPresetSeed == 0) ? new System.Random() : new System.Random(autoPresetSeed);
+
+        presetTargets = new PresetGeoPoint[autoPresetCount];
+
+        for (int i = 0; i < autoPresetCount; i++)
+        {
+            // uniform-ish ring distribution
+            double t = rng.NextDouble() * System.Math.PI * 2.0;
+            double u = rng.NextDouble();
+            double r = autoPresetMinRadiusMeters + (autoPresetRadiusMeters - autoPresetMinRadiusMeters) * System.Math.Sqrt(u);
+
+            double northM = System.Math.Cos(t) * r;
+            double eastM = System.Math.Sin(t) * r;
+
+            (double lat, double lon) = OffsetLatLonMeters(lat0, lon0, northM, eastM);
+            presetTargets[i] = new PresetGeoPoint(lat, lon);
+        }
+
+        // Reset bag so selection uses new list
+        _presetBag = null;
+        _presetBagIndex = 0;
+        _hasPickedFirstTarget = false;
+        _lastPresetIndex = -1;
+
+        if (debugLogs)
+            Debug.Log($"[TargetHunt] Auto-generated {autoPresetCount} local presets around ({lat0:F6},{lon0:F6}) r≈{autoPresetRadiusMeters}m");
+    }
+
+    private static (double lat, double lon) OffsetLatLonMeters(double latDeg, double lonDeg, double northM, double eastM)
+    {
+        const double R = 6378137.0; // WGS84-ish
+        double rad = System.Math.PI / 180.0;
+
+        double dLat = northM / R;
+        double dLon = eastM / (R * System.Math.Cos(latDeg * rad));
+
+        double lat2 = latDeg + dLat / rad;
+        double lon2 = lonDeg + dLon / rad;
+
+        return (lat2, lon2);
+    }
+
 
     private void EnsureTarget(Map map2D)
     {
@@ -619,19 +700,130 @@ public class TargetManager : MonoBehaviour
         if (!usePresetTargets) return false;
         if (presetTargets == null || presetTargets.Length == 0) return false;
 
-        if (_presetBag == null || _presetBag.Length != presetTargets.Length) ResetPresetBag();
-        if (_presetBag == null || _presetBag.Length == 0) return false;
+        // If we're not doing the new logic, keep old bag behavior
+        if (!firstTargetRandomThenClosest)
+        {
+            if (_presetBag == null || _presetBag.Length != presetTargets.Length) ResetPresetBag();
+            if (_presetBag == null || _presetBag.Length == 0) return false;
 
-        if (_presetBagIndex >= _presetBag.Length) ResetPresetBag();
+            if (_presetBagIndex >= _presetBag.Length) ResetPresetBag();
 
-        int idx = _presetBag[_presetBagIndex++];
-        var p = presetTargets[idx];
+            int idx = _presetBag[_presetBagIndex++];
+            var p = presetTargets[idx];
+            tLat = p.lat;
+            tLon = p.lon;
+            _lastPresetIndex = idx;
+            return true;
+        }
 
-        tLat = p.lat;
-        tLon = p.lon;
+        // --- New logic ---
+        // First pick: random from bag (so you still get variety)
+        if (!_hasPickedFirstTarget)
+        {
+            if (_presetBag == null || _presetBag.Length != presetTargets.Length) ResetPresetBag();
+            if (_presetBag == null || _presetBag.Length == 0) return false;
+
+            if (_presetBagIndex >= _presetBag.Length) ResetPresetBag();
+
+            int idx = _presetBag[_presetBagIndex++];
+            var p = presetTargets[idx];
+
+            tLat = p.lat;
+            tLon = p.lon;
+
+            _hasPickedFirstTarget = true;
+            _lastPresetIndex = idx;
+            return true;
+        }
+
+        // After first: choose closest preset to player's current position (if known)
+        if (!TryGetPlayerLatLon(out double pLat, out double pLon))
+        {
+            // If we can't get player lat/lon, fall back to bag behavior
+            if (_presetBag == null || _presetBag.Length != presetTargets.Length) ResetPresetBag();
+            if (_presetBag == null || _presetBag.Length == 0) return false;
+
+            if (_presetBagIndex >= _presetBag.Length) ResetPresetBag();
+
+            int idx = _presetBag[_presetBagIndex++];
+            var p = presetTargets[idx];
+            tLat = p.lat;
+            tLon = p.lon;
+            _lastPresetIndex = idx;
+            return true;
+        }
+
+        int bestIdx = -1;
+        double bestM = double.MaxValue;
+
+        for (int i = 0; i < presetTargets.Length; i++)
+        {
+            if (avoidImmediateRepeat && presetTargets.Length > 1 && i == _lastPresetIndex)
+                continue;
+
+            var pt = presetTargets[i];
+            double m = ApproxMetersBetween(pLat, pLon, pt.lat, pt.lon);
+            if (m < bestM)
+            {
+                bestM = m;
+                bestIdx = i;
+            }
+        }
+
+        if (bestIdx < 0) return false;
+
+        var best = presetTargets[bestIdx];
+        tLat = best.lat;
+        tLon = best.lon;
+        _lastPresetIndex = bestIdx;
+
+        if (debugLogs)
+            Debug.Log($"[TargetHunt] Closest preset chosen idx={bestIdx} dist≈{bestM:F0}m from player=({pLat:F6},{pLon:F6})");
 
         return true;
     }
+
+
+    private bool TryGetPlayerLatLon(out double lat, out double lon)
+    {
+        // Best source: SonusLocationState (your system snapshot)
+        lat = SonusLocationState.Lat;
+        lon = SonusLocationState.Lng;
+
+        if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
+            return true;
+
+        // Fallback: use 2D map center if available (better than nothing)
+        if (sceneController != null && sceneController.map2D != null)
+        {
+            lon = sceneController.map2D.view.center.x;
+            lat = sceneController.map2D.view.center.y;
+            if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
+                return true;
+        }
+
+        return false;
+    }
+
+    // Good enough for ~km distances: equirectangular approximation in meters
+    private static double ApproxMetersBetween(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double R = 6371000.0; // meters
+        double rad = System.Math.PI / 180.0;
+
+        double phi1 = lat1 * rad;
+        double phi2 = lat2 * rad;
+
+        double dPhi = (lat2 - lat1) * rad;
+        double dLam = (lon2 - lon1) * rad;
+
+        double x = dLam * System.Math.Cos((phi1 + phi2) * 0.5);
+        double y = dPhi;
+
+        return System.Math.Sqrt(x * x + y * y) * R;
+    }
+
+
 
     private static T FindAny<T>() where T : Object
     {

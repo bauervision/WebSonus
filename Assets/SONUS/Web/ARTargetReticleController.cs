@@ -19,7 +19,7 @@ public class ARTargetReticleController : MonoBehaviour
     [Header("Rules")]
     public bool arModeEnabled = false;
     public float foundRadiusMeters = 20f;
-    public float maxShowDistanceMeters = 1000f;
+    public float maxShowDistanceMeters = 2000f;
 
     [Header("Optional")]
     public bool showDistanceLabel = true;
