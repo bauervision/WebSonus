@@ -5,21 +5,6 @@ using UnityEngine;
 using OnlineMaps;
 using Sonus.Core;
 
-[System.Serializable]
-public struct PresetGeoPoint
-{
-    public double lat;
-    public double lon;
-
-    public PresetGeoPoint(double lat, double lon)
-    {
-        this.lat = lat;
-        this.lon = lon;
-    }
-
-    public override string ToString() => $"({lat:F6},{lon:F6})";
-}
-
 public class TargetManager : MonoBehaviour
 {
     [Header("Refs (from SonusMapSceneController)")]
@@ -67,48 +52,32 @@ public class TargetManager : MonoBehaviour
 
     private float _next2DRedrawTime;
 
-    [Header("Preset Targets")]
-    public bool usePresetTargets = true;
+    [Header("Run Settings")]
+    [Tooltip("How many targets spawn in one run before prompting the user to run again.")]
+    public int targetsPerRun = 3;
 
-    public PresetGeoPoint[] presetTargets = new PresetGeoPoint[]
-    {
-        new(37.305458, -80.612394),
-        new(37.306329, -80.610859),
-        new(37.306515, -80.613209),
-        new(37.303756, -80.612456),
-        new(37.304914, -80.611766),
-        new(37.304215, -80.610174),
-        new(37.306193, -80.609963),
-        new(37.305381, -80.610454),
-        new(37.307287, -80.610910),
-        new(37.306878, -80.614156),
-        new(37.305340, -80.614054),
-        new(37.306148, -80.608554),
-    };
+    [Header("Spawn Distance (feel)")]
+    [Tooltip("Average spawn distance from player (meters).")]
+    public float spawnDistanceMeters = 135f;
 
-    [Header("Preset Selection")]
-    public bool firstTargetRandomThenClosest = true;
+    [Tooltip("Random +/- jitter applied to spawnDistanceMeters (meters).")]
+    public float spawnDistanceJitterMeters = 25f;
 
-    [Tooltip("If true, we won't immediately re-use the exact last preset index.")]
-    public bool avoidImmediateRepeat = true;
+    [Tooltip("Clamp: never spawn closer than this distance (meters).")]
+    public float spawnMinDistanceMeters = 90f;
 
-    private bool _hasPickedFirstTarget;
-    private int _lastPresetIndex = -1;
+    [Header("Spawn Bounds (2D view snapshot)")]
+    public bool constrainToStartViewBounds = true;
 
-    [Header("Local Presets (auto-generate)")]
-    public bool autoGeneratePresetsNearPlayer = true;
-    public int autoPresetCount = 12;
-    public float autoPresetRadiusMeters = 450f; // how far out the cloud spreads
-    public float autoPresetMinRadiusMeters = 120f; // keep them from clustering on top of you
-    public int autoPresetSeed = 0; // 0 = random each run; set a number for repeatable
-
-
-
-    private int[] _presetBag;
-    private int _presetBagIndex;
+    [Tooltip("Shrink the captured bounds inward (meters) to keep spawns away from the edge.")]
+    public float boundsInsetMeters = 30f;
 
     [Header("Debug")]
     public bool debugLogs = true;
+
+    // UI hooks (wire these from your UI layer)
+    public System.Action OnRunComplete;
+    public System.Action<int, int> OnRunProgressChanged; // (spawned, total)
 
     // ✅ Do NOT let Unity serialize a default TargetActor (0,0) into the component
     [System.NonSerialized] public TargetActor currentTarget;
@@ -125,6 +94,17 @@ public class TargetManager : MonoBehaviour
     // Marker3D lifecycle safety
     private bool _marker3DReady;
     private float _next3DResyncAllowedTime;
+
+    // Run state
+    private int _targetsSpawnedThisRun = 0;
+    private bool _runActive = true;
+
+    // Spawn bounds snapshot (captured at run start)
+    private bool _hasBounds;
+    private double _minLat, _maxLat, _minLon, _maxLon;
+
+    // Direction variety (8 bins: N,NE,E,SE,S,SW,W,NW)
+    private int _lastDirBin = -1;
 
     private void Awake()
     {
@@ -145,7 +125,7 @@ public class TargetManager : MonoBehaviour
     {
         if (_isRespawning) return;
 
-        // We want patrol to run even in 2D so the icon moves on the 2D map.
+        // Patrol should run even in 2D so the icon moves on the 2D map.
         if (enablePatrol && patrolManager != null && HasValidTarget())
         {
             // Keep patrol settings live-tunable
@@ -200,17 +180,22 @@ public class TargetManager : MonoBehaviour
 
         Vector3 measure = new Vector3(p.x, p.y + yVisual + yExtra, p.z);
 
-        float d = Vector3.Distance(playerRoot.position, measure);
+        // Unity world distance (units)
+        float dWorld = Vector3.Distance(playerRoot.position, measure);
 
-        if (Time.time >= _nextFoundAllowedTime && d <= foundRadiusMeters)
+        // Geo distance (meters) — this is what we expose to UI
+        _lastDistanceMeters = ComputeDistanceMeters();
+
+        if (Time.time >= _nextFoundAllowedTime && _lastDistanceMeters > 0f && _lastDistanceMeters <= foundRadiusMeters)
         {
             _nextFoundAllowedTime = Time.time + foundCooldownSeconds;
 
             if (debugLogs)
-                Debug.Log($"[TargetHunt] FOUND (d={d:F1}m) -> respawn");
+                Debug.Log($"[TargetHunt] FOUND (d={_lastDistanceMeters:F1}m) -> respawn");
 
             RequestRespawn();
         }
+
     }
 
     // ---------------------------
@@ -221,7 +206,6 @@ public class TargetManager : MonoBehaviour
     {
         _in2DMode = true;
 
-        EnsureLocalPresetTargets(map2D);
         EnsureTarget(map2D);
 
         // Never create 2D markers immediately on mode switch; OnlineMaps may not be initialized yet.
@@ -255,114 +239,100 @@ public class TargetManager : MonoBehaviour
     }
 
     // ---------------------------
-    // Target
+    // Run control (called by UI)
     // ---------------------------
 
-
-    private void EnsureLocalPresetTargets(Map map2D)
+    public void StartNewRun()
     {
-        if (!autoGeneratePresetsNearPlayer) return;
-        if (presetTargets != null && presetTargets.Length > 0 && _hasPickedFirstTarget) return;
-        // (optional) don’t regenerate mid-run once you’ve started picking.
+        _runActive = true;
+        _targetsSpawnedThisRun = 0;
 
-        if (!TryGetPlayerLatLon(out double lat0, out double lon0))
+        CaptureStartBounds();
+
+        currentTarget = null;
+        EnsureTarget(sceneController != null ? sceneController.map2D : null);
+
+        if (_in2DMode)
+            Kick2DMarkerCreateIf2DActive();
+        else
         {
-            // Fallback to map center if needed
-            if (map2D != null)
-            {
-                lon0 = map2D.view.center.x;
-                lat0 = map2D.view.center.y;
-            }
+            if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
+            _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
         }
 
-        if (System.Math.Abs(lat0) < 1e-9 && System.Math.Abs(lon0) < 1e-9) return;
-
-        var rng = (autoPresetSeed == 0) ? new System.Random() : new System.Random(autoPresetSeed);
-
-        presetTargets = new PresetGeoPoint[autoPresetCount];
-
-        for (int i = 0; i < autoPresetCount; i++)
-        {
-            // uniform-ish ring distribution
-            double t = rng.NextDouble() * System.Math.PI * 2.0;
-            double u = rng.NextDouble();
-            double r = autoPresetMinRadiusMeters + (autoPresetRadiusMeters - autoPresetMinRadiusMeters) * System.Math.Sqrt(u);
-
-            double northM = System.Math.Cos(t) * r;
-            double eastM = System.Math.Sin(t) * r;
-
-            (double lat, double lon) = OffsetLatLonMeters(lat0, lon0, northM, eastM);
-            presetTargets[i] = new PresetGeoPoint(lat, lon);
-        }
-
-        // Reset bag so selection uses new list
-        _presetBag = null;
-        _presetBagIndex = 0;
-        _hasPickedFirstTarget = false;
-        _lastPresetIndex = -1;
+        OnRunProgressChanged?.Invoke(_targetsSpawnedThisRun, targetsPerRun);
 
         if (debugLogs)
-            Debug.Log($"[TargetHunt] Auto-generated {autoPresetCount} local presets around ({lat0:F6},{lon0:F6}) r≈{autoPresetRadiusMeters}m");
+            Debug.Log("[TargetHunt] New run started.");
     }
 
-    private static (double lat, double lon) OffsetLatLonMeters(double latDeg, double lonDeg, double northM, double eastM)
+    private void CaptureStartBounds()
     {
-        const double R = 6378137.0; // WGS84-ish
-        double rad = System.Math.PI / 180.0;
+        _hasBounds = false;
+        _lastDirBin = -1;
 
-        double dLat = northM / R;
-        double dLon = eastM / (R * System.Math.Cos(latDeg * rad));
+        if (!constrainToStartViewBounds) return;
 
-        double lat2 = latDeg + dLat / rad;
-        double lon2 = lonDeg + dLon / rad;
+        var map2D = sceneController != null ? sceneController.map2D : null;
+        if (map2D == null || map2D.view == null) return;
 
-        return (lat2, lon2);
+        // GeoPoint: x=lng, y=lat
+        var tl = map2D.view.topLeft;
+        var br = map2D.view.bottomRight;
+
+        _minLat = System.Math.Min(tl.y, br.y);
+        _maxLat = System.Math.Max(tl.y, br.y);
+        _minLon = System.Math.Min(tl.x, br.x);
+        _maxLon = System.Math.Max(tl.x, br.x);
+
+        // Inset to keep spawns away from the edge
+        if (boundsInsetMeters > 0)
+        {
+            double midLat = (_minLat + _maxLat) * 0.5;
+            TargetGeoUtil.MetersToLatLonDeltas(midLat, boundsInsetMeters, out double dLat, out double dLon);
+
+            _minLat += dLat; _maxLat -= dLat;
+            _minLon += dLon; _maxLon -= dLon;
+        }
+
+        _hasBounds = true;
+
+        if (debugLogs)
+            Debug.Log($"[TargetHunt] Bounds captured lat[{_minLat:F6},{_maxLat:F6}] lon[{_minLon:F6},{_maxLon:F6}] (inset {boundsInsetMeters}m)");
     }
 
+    // ---------------------------
+    // Target creation
+    // ---------------------------
 
     private void EnsureTarget(Map map2D)
     {
         if (HasValidTarget()) return;
 
-        // Base from state / center / defaults
-        double baseLat = SonusLocationState.Lat;
-        double baseLon = SonusLocationState.Lng;
+        if (!_runActive || _targetsSpawnedThisRun >= targetsPerRun)
+            return;
 
-        if ((baseLat == 0 && baseLon == 0) && map2D != null)
-        {
-            baseLon = map2D.view.center.x;
-            baseLat = map2D.view.center.y;
-        }
+        if (!TryGetPlayerLatLon(map2D, out double baseLat, out double baseLon))
+            return;
 
-        if ((baseLat == 0 && baseLon == 0) && sceneController != null)
-        {
-            baseLat = sceneController.defaultLatitude;
-            baseLon = sceneController.defaultLongitude;
-        }
+        (double tLat, double tLon) = GenerateRandomGeoOffset(baseLat, baseLon);
+        ApplyNewTarget(tLat, tLon, baseLat, baseLon);
+    }
 
-        double tLat, tLon;
-
-        if (TryPickNextPreset(out tLat, out tLon))
-        {
-            if (debugLogs)
-                Debug.Log($"[TargetHunt] Using preset target=({tLat:F6},{tLon:F6})");
-        }
-        else
-        {
-            // Fallback: deterministic offset so we ALWAYS get a visible target nearby.
-            tLat = baseLat + 0.001;
-            tLon = baseLon + 0.001;
-
-            if (debugLogs)
-                Debug.Log($"[TargetHunt] Using fallback target=({tLat:F6},{tLon:F6}) from base=({baseLat:F6},{baseLon:F6})");
-        }
+    private void ApplyNewTarget(double tLat, double tLon, double baseLat, double baseLon)
+    {
+        // If run is over, don't apply
+        if (!_runActive || _targetsSpawnedThisRun >= targetsPerRun) return;
 
         currentTarget = new TargetActor(TargetType.STATIONARY, tLat, tLon)
         {
-            _Name = "Target"
+            _Name = $"Target {_targetsSpawnedThisRun + 1}"
         };
 
-        // Seed patrol route immediately so 2D shows motion from the start.
+        _targetsSpawnedThisRun++;
+        OnRunProgressChanged?.Invoke(_targetsSpawnedThisRun, targetsPerRun);
+
+        // Seed patrol
         if (enablePatrol && patrolManager != null)
         {
             patrolManager.legMeters = patrolLegMeters;
@@ -371,13 +341,168 @@ public class TargetManager : MonoBehaviour
         }
 
         if (debugLogs)
-            Debug.Log($"[TargetHunt] Seed target=({currentTarget._Lat:F6},{currentTarget._Lon:F6}) from base=({baseLat:F6},{baseLon:F6})");
+        {
+            double approxGeo = TargetGeoUtil.ApproxMetersBetween(baseLat, baseLon, tLat, tLon);
+            Debug.Log($"[TargetHunt] Spawned target #{_targetsSpawnedThisRun}/{targetsPerRun} geoDist≈{approxGeo:F0}m @ ({tLat:F6},{tLon:F6})");
+        }
+
+        // If we're in 3D, kick a proper sync (now that currentTarget is committed)
+        if (!_in2DMode)
+        {
+            if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
+            _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
+        }
+    }
+
+    private (double lat, double lon) GenerateRandomGeoOffset(double lat0, double lon0)
+    {
+        // If we have bounds, prefer directions that keep us inside the box.
+        // Try a bunch of candidates; accept first that lands inside bounds.
+        const int attempts = 24;
+
+        for (int i = 0; i < attempts; i++)
+        {
+            int bin = PickDirectionBin(lat0, lon0);
+            double bearing = BinToBearingRad(bin);
+
+            float distM = spawnDistanceMeters + Random.Range(-spawnDistanceJitterMeters, spawnDistanceJitterMeters);
+            distM = Mathf.Max(distM, spawnMinDistanceMeters);
+
+            double northM = System.Math.Cos(bearing) * distM;
+            double eastM = System.Math.Sin(bearing) * distM;
+
+            var (tLat, tLon) = TargetGeoUtil.OffsetLatLonMeters(lat0, lon0, northM, eastM);
+
+            if (!_hasBounds || PointInBounds(tLat, tLon))
+            {
+                _lastDirBin = bin;
+                return (tLat, tLon);
+            }
+        }
+
+        // Fallback: if we're boxed-in somehow, clamp the player's location into the bounds
+        if (_hasBounds)
+            return ClampIntoBounds(lat0, lon0);
+
+        // Final fallback (unbounded)
+        double t = Random.value * System.Math.PI * 2.0;
+        float d = Mathf.Max(spawnDistanceMeters, spawnMinDistanceMeters);
+        double n = System.Math.Cos(t) * d;
+        double e = System.Math.Sin(t) * d;
+        return TargetGeoUtil.OffsetLatLonMeters(lat0, lon0, n, e);
+    }
+
+    private bool PointInBounds(double lat, double lon)
+    {
+        return lat >= _minLat && lat <= _maxLat && lon >= _minLon && lon <= _maxLon;
+    }
+
+    private (double lat, double lon) ClampIntoBounds(double lat, double lon)
+    {
+        double cLat = System.Math.Max(_minLat, System.Math.Min(_maxLat, lat));
+        double cLon = System.Math.Max(_minLon, System.Math.Min(_maxLon, lon));
+        return (cLat, cLon);
+    }
+
+    private int PickDirectionBin(double pLat, double pLon)
+    {
+        // If no bounds, just pick any bin, avoid immediate repeat.
+        if (!_hasBounds)
+        {
+            int b = Random.Range(0, 8);
+            if (_lastDirBin >= 0 && b == _lastDirBin) b = (b + Random.Range(1, 8)) % 8;
+            return b;
+        }
+
+        // Margin near edge where we start “pushing inward”
+        const double marginM = 70.0;
+
+        double toNorthM = TargetGeoUtil.ApproxMetersBetween(pLat, pLon, _maxLat, pLon);
+        double toSouthM = TargetGeoUtil.ApproxMetersBetween(pLat, pLon, _minLat, pLon);
+        double toEastM = TargetGeoUtil.ApproxMetersBetween(pLat, pLon, pLat, _maxLon);
+        double toWestM = TargetGeoUtil.ApproxMetersBetween(pLat, pLon, pLat, _minLon);
+
+        bool banN = toNorthM < marginM;
+        bool banS = toSouthM < marginM;
+        bool banE = toEastM < marginM;
+        bool banW = toWestM < marginM;
+
+        // Candidate bins, filtered by edge bans
+        // bins: 0=N,1=NE,2=E,3=SE,4=S,5=SW,6=W,7=NW
+        var cand = new System.Collections.Generic.List<int>(8);
+
+        for (int b = 0; b < 8; b++)
+        {
+            if (_lastDirBin >= 0 && b == _lastDirBin) continue;
+
+            bool usesN = (b == 0 || b == 1 || b == 7);
+            bool usesS = (b == 4 || b == 3 || b == 5);
+            bool usesE = (b == 2 || b == 1 || b == 3);
+            bool usesW = (b == 6 || b == 7 || b == 5);
+
+            if (banN && usesN) continue;
+            if (banS && usesS) continue;
+            if (banE && usesE) continue;
+            if (banW && usesW) continue;
+
+            cand.Add(b);
+        }
+
+        // If filtered everything, relax bans (still avoid repeat if possible)
+        if (cand.Count == 0)
+        {
+            for (int b = 0; b < 8; b++)
+            {
+                if (_lastDirBin >= 0 && b == _lastDirBin) continue;
+                cand.Add(b);
+            }
+        }
+
+        if (cand.Count == 0) return Random.Range(0, 8);
+        return cand[Random.Range(0, cand.Count)];
+    }
+
+    private static double BinToBearingRad(int bin)
+    {
+        // 0=N,2=E,4=S,6=W
+        // Using: north=cos(bearing)*d, east=sin(bearing)*d
+        return (System.Math.PI / 4.0) * bin;
     }
 
     private bool HasValidTarget()
     {
         if (currentTarget == null) return false;
         return !(System.Math.Abs(currentTarget._Lat) < 1e-9 && System.Math.Abs(currentTarget._Lon) < 1e-9);
+    }
+
+    private bool TryGetPlayerLatLon(Map map2D, out double lat, out double lon)
+    {
+        // Best source: SonusLocationState (if your system is updating it correctly)
+        lat = SonusLocationState.Lat;
+        lon = SonusLocationState.Lng;
+        if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
+            return true;
+
+        // Fallback: 2D map center
+        if (map2D != null)
+        {
+            lon = map2D.view.center.x;
+            lat = map2D.view.center.y;
+            if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
+                return true;
+        }
+
+        // Last resort: defaults
+        if (sceneController != null)
+        {
+            lat = sceneController.defaultLatitude;
+            lon = sceneController.defaultLongitude;
+            if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
+                return true;
+        }
+
+        lat = lon = 0;
+        return false;
     }
 
     // ---------------------------
@@ -623,6 +748,20 @@ public class TargetManager : MonoBehaviour
         Set3DEnabled(false);
 
         currentTarget = null;
+
+        // If we've already spawned the full run, complete it now.
+        if (_targetsSpawnedThisRun >= targetsPerRun)
+        {
+            _runActive = false;
+
+            if (debugLogs)
+                Debug.Log("[TargetHunt] Run complete. Waiting for user to start another run.");
+
+            OnRunComplete?.Invoke();
+            _isRespawning = false;
+            yield break;
+        }
+
         EnsureTarget(sceneController != null ? sceneController.map2D : null);
 
         // Re-arm patrol route for the new target
@@ -665,162 +804,43 @@ public class TargetManager : MonoBehaviour
     }
 
     // ---------------------------
-    // Preset bag
+    // Helpers
     // ---------------------------
-
-    private void ResetPresetBag()
+    private float _lastDistanceMeters = -1f;
+    /// <summary>
+    /// Returns the last computed target distance in meters.
+    /// Falls back to computing from lat/lon if needed.
+    /// </summary>
+    public float DistanceToTargetMeters()
     {
-        if (presetTargets == null || presetTargets.Length == 0)
-        {
-            _presetBag = null;
-            _presetBagIndex = 0;
-            return;
-        }
+        if (currentTarget == null) return float.PositiveInfinity;
 
-        _presetBag = new int[presetTargets.Length];
-        for (int i = 0; i < _presetBag.Length; i++) _presetBag[i] = i;
+        if (!TryGetPlayerLatLon(sceneController != null ? sceneController.map2D : null, out double pLat, out double pLon))
+            return float.PositiveInfinity;
 
-        // Fisher–Yates shuffle
-        for (int i = _presetBag.Length - 1; i > 0; i--)
-        {
-            int j = Random.Range(0, i + 1);
-            (_presetBag[i], _presetBag[j]) = (_presetBag[j], _presetBag[i]);
-        }
+        double tLat = currentTarget._Lat;
+        double tLon = currentTarget._Lon;
 
-        _presetBagIndex = 0;
-
-        if (debugLogs)
-            Debug.Log($"[TargetHunt] Preset bag reset ({presetTargets.Length} targets).");
+        return (float)TargetGeoUtil.ApproxMetersBetween(pLat, pLon, tLat, tLon);
     }
 
-    private bool TryPickNextPreset(out double tLat, out double tLon)
+    public bool TryGetPlayerLatLonForUI(out double lat, out double lon)
     {
-        tLat = tLon = 0;
-
-        if (!usePresetTargets) return false;
-        if (presetTargets == null || presetTargets.Length == 0) return false;
-
-        // If we're not doing the new logic, keep old bag behavior
-        if (!firstTargetRandomThenClosest)
-        {
-            if (_presetBag == null || _presetBag.Length != presetTargets.Length) ResetPresetBag();
-            if (_presetBag == null || _presetBag.Length == 0) return false;
-
-            if (_presetBagIndex >= _presetBag.Length) ResetPresetBag();
-
-            int idx = _presetBag[_presetBagIndex++];
-            var p = presetTargets[idx];
-            tLat = p.lat;
-            tLon = p.lon;
-            _lastPresetIndex = idx;
-            return true;
-        }
-
-        // --- New logic ---
-        // First pick: random from bag (so you still get variety)
-        if (!_hasPickedFirstTarget)
-        {
-            if (_presetBag == null || _presetBag.Length != presetTargets.Length) ResetPresetBag();
-            if (_presetBag == null || _presetBag.Length == 0) return false;
-
-            if (_presetBagIndex >= _presetBag.Length) ResetPresetBag();
-
-            int idx = _presetBag[_presetBagIndex++];
-            var p = presetTargets[idx];
-
-            tLat = p.lat;
-            tLon = p.lon;
-
-            _hasPickedFirstTarget = true;
-            _lastPresetIndex = idx;
-            return true;
-        }
-
-        // After first: choose closest preset to player's current position (if known)
-        if (!TryGetPlayerLatLon(out double pLat, out double pLon))
-        {
-            // If we can't get player lat/lon, fall back to bag behavior
-            if (_presetBag == null || _presetBag.Length != presetTargets.Length) ResetPresetBag();
-            if (_presetBag == null || _presetBag.Length == 0) return false;
-
-            if (_presetBagIndex >= _presetBag.Length) ResetPresetBag();
-
-            int idx = _presetBag[_presetBagIndex++];
-            var p = presetTargets[idx];
-            tLat = p.lat;
-            tLon = p.lon;
-            _lastPresetIndex = idx;
-            return true;
-        }
-
-        int bestIdx = -1;
-        double bestM = double.MaxValue;
-
-        for (int i = 0; i < presetTargets.Length; i++)
-        {
-            if (avoidImmediateRepeat && presetTargets.Length > 1 && i == _lastPresetIndex)
-                continue;
-
-            var pt = presetTargets[i];
-            double m = ApproxMetersBetween(pLat, pLon, pt.lat, pt.lon);
-            if (m < bestM)
-            {
-                bestM = m;
-                bestIdx = i;
-            }
-        }
-
-        if (bestIdx < 0) return false;
-
-        var best = presetTargets[bestIdx];
-        tLat = best.lat;
-        tLon = best.lon;
-        _lastPresetIndex = bestIdx;
-
-        if (debugLogs)
-            Debug.Log($"[TargetHunt] Closest preset chosen idx={bestIdx} dist≈{bestM:F0}m from player=({pLat:F6},{pLon:F6})");
-
-        return true;
+        return TryGetPlayerLatLon(sceneController != null ? sceneController.map2D : null, out lat, out lon);
     }
-
-
-    private bool TryGetPlayerLatLon(out double lat, out double lon)
+    /// <summary>
+    /// Compute distance in meters using lat/lon (player vs target).
+    /// This avoids Unity world scale issues with TileSet size.
+    /// </summary>
+    private float ComputeDistanceMeters()
     {
-        // Best source: SonusLocationState (your system snapshot)
-        lat = SonusLocationState.Lat;
-        lon = SonusLocationState.Lng;
+        if (currentTarget == null) return -1f;
 
-        if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
-            return true;
+        if (!TryGetPlayerLatLon(sceneController != null ? sceneController.map2D : null, out double pLat, out double pLon))
+            return -1f;
 
-        // Fallback: use 2D map center if available (better than nothing)
-        if (sceneController != null && sceneController.map2D != null)
-        {
-            lon = sceneController.map2D.view.center.x;
-            lat = sceneController.map2D.view.center.y;
-            if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
-                return true;
-        }
-
-        return false;
-    }
-
-    // Good enough for ~km distances: equirectangular approximation in meters
-    private static double ApproxMetersBetween(double lat1, double lon1, double lat2, double lon2)
-    {
-        const double R = 6371000.0; // meters
-        double rad = System.Math.PI / 180.0;
-
-        double phi1 = lat1 * rad;
-        double phi2 = lat2 * rad;
-
-        double dPhi = (lat2 - lat1) * rad;
-        double dLam = (lon2 - lon1) * rad;
-
-        double x = dLam * System.Math.Cos((phi1 + phi2) * 0.5);
-        double y = dPhi;
-
-        return System.Math.Sqrt(x * x + y * y) * R;
+        double m = TargetGeoUtil.ApproxMetersBetween(pLat, pLon, currentTarget._Lat, currentTarget._Lon);
+        return (float)m;
     }
 
 

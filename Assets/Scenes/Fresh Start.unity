@@ -2162,33 +2162,13 @@ MonoBehaviour:
   foundRadiusMeters: 20
   foundCooldownSeconds: 2
   map2DRedrawHz: 10
-  usePresetTargets: 1
-  presetTargets:
-  - lat: 37.305458
-    lon: -80.612394
-  - lat: 37.306329
-    lon: -80.610859
-  - lat: 37.306515
-    lon: -80.613209
-  - lat: 37.303756
-    lon: -80.612456
-  - lat: 37.304914
-    lon: -80.611766
-  - lat: 37.304215
-    lon: -80.610174
-  - lat: 37.306193
-    lon: -80.609963
-  - lat: 37.305381
-    lon: -80.610454
-  - lat: 37.307287
-    lon: -80.61091
-  - lat: 37.306878
-    lon: -80.614156
-  - lat: 37.30534
-    lon: -80.614054
-  - lat: 37.306148
-    lon: -80.608554
-  debugLogs: 0
+  targetsPerRun: 3
+  spawnDistanceMeters: 120
+  spawnDistanceJitterMeters: 35
+  spawnMinDistanceMeters: 90
+  constrainToStartViewBounds: 1
+  boundsInsetMeters: 30
+  debugLogs: 1
 --- !u!114 &1519239690
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2208,7 +2188,7 @@ MonoBehaviour:
   reticleScale: 1
   arModeEnabled: 1
   foundRadiusMeters: 20
-  maxShowDistanceMeters: 1000
+  maxShowDistanceMeters: 2000
   showDistanceLabel: 1
   foundText: FOUND
 --- !u!114 &1519239691

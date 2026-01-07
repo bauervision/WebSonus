@@ -1,7 +1,6 @@
 // Assets/SONUS/Web/ARTargetReticleController.cs
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 public class ARTargetReticleController : MonoBehaviour
 {
@@ -18,15 +17,15 @@ public class ARTargetReticleController : MonoBehaviour
 
     [Header("Rules")]
     public bool arModeEnabled = false;
-    public float foundRadiusMeters = 20f;
-    public float maxShowDistanceMeters = 2000f;
+    public float foundRadiusMeters = 12f;
+    public float maxShowDistanceMeters = 500f;
 
     [Header("Optional")]
     public bool showDistanceLabel = true;
     public string foundText = "FOUND";
 
-    RectTransform _reticle;
-    TMP_Text _label;
+    private RectTransform _reticle;
+    private TMP_Text _label;
 
     void Awake()
     {
@@ -38,14 +37,15 @@ public class ARTargetReticleController : MonoBehaviour
     {
         if (!arModeEnabled) { Hide(); return; }
         if (targetManager == null || arCamera == null || canvas == null) { Hide(); return; }
-
         if (targetManager.currentTarget == null) { Hide(); return; }
 
+        // Use world only for screen placement
         if (!targetManager.TryGetTargetWorldPos(out Vector3 targetWorld)) { Hide(); return; }
 
-        if (targetManager.playerRoot == null) { Hide(); return; }
+        // Use GEO for distance (meters)
+        float d = targetManager.DistanceToTargetMeters();
+        if (!float.IsFinite(d)) { Hide(); return; }
 
-        float d = Vector3.Distance(targetManager.playerRoot.position, targetWorld);
         if (d > maxShowDistanceMeters) { Hide(); return; }
 
         // Must be visible on-screen
@@ -57,13 +57,12 @@ public class ARTargetReticleController : MonoBehaviour
         _reticle.anchoredPosition = anchored;
         _reticle.localScale = Vector3.one * reticleScale;
 
-        // Found check: within radius AND visible (already visible if we got here)
+        // Found check (meters)
         if (d <= foundRadiusMeters)
         {
             if (_label != null) _label.text = foundText;
-            return; // TargetManager handles respawn now
+            return; // TargetManager handles respawn
         }
-
 
         if (_label != null && showDistanceLabel)
             _label.text = FormatDistance(d);
