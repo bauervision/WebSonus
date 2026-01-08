@@ -44,6 +44,19 @@ public class ARTargetReticleController : MonoBehaviour
 
         // Use GEO for distance (meters)
         float d = targetManager.DistanceToTargetMeters();
+
+
+#if UNITY_EDITOR
+        // World-space distance (should generally go down as you walk closer in 3D if anchors are correct)
+        float dw = Vector3.Distance(arCamera.transform.position, targetWorld);
+        if (_label != null)
+        {
+            // show both to compare live
+            _label.text = $"{FormatDistance(d)} | W:{Mathf.RoundToInt(dw)}m";
+        }
+#endif
+
+
         if (!float.IsFinite(d)) { Hide(); return; }
 
         if (d > maxShowDistanceMeters) { Hide(); return; }

@@ -1,4 +1,4 @@
-// Assets/Sonus/Core/Scripts/DirectionMath.cs
+// Assets/Sonus/Core/DirectionMath.cs
 using UnityEngine;
 
 namespace Sonus.Core

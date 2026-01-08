@@ -11,6 +11,9 @@ public class TargetManager : MonoBehaviour
     public SonusMapSceneController sceneController;
     public Transform playerRoot;
 
+
+
+
     [Header("2D Wiring (assign in Inspector)")]
     [Tooltip("Drag the Marker2DManager that belongs to the 2D map (Map Mode).")]
     public Marker2DManager markerManager2D;
@@ -106,9 +109,13 @@ public class TargetManager : MonoBehaviour
     // Direction variety (8 bins: N,NE,E,SE,S,SW,W,NW)
     private int _lastDirBin = -1;
 
+    private float _lastDistanceMeters = -1f;
+
     private void Awake()
     {
         if (sceneController == null) sceneController = FindAny<SonusMapSceneController>();
+
+
 
         // ✅ Kill any inspector-serialized ghost target
         currentTarget = null;
@@ -119,16 +126,19 @@ public class TargetManager : MonoBehaviour
             patrolManager.legMeters = patrolLegMeters;
             patrolManager.speedMps = patrolSpeedMps;
         }
+
+
     }
 
     private void Update()
     {
         if (_isRespawning) return;
 
-        // Patrol should run even in 2D so the icon moves on the 2D map.
+
+
+        // 2) Patrol updates target geo (truth). Markers are just renderers.
         if (enablePatrol && patrolManager != null && HasValidTarget())
         {
-            // Keep patrol settings live-tunable
             patrolManager.legMeters = patrolLegMeters;
             patrolManager.speedMps = patrolSpeedMps;
 
@@ -147,7 +157,6 @@ public class TargetManager : MonoBehaviour
                     }
                     catch
                     {
-                        // OM can throw if 3D stack isn't fully alive yet; self-heal.
                         _marker3DReady = false;
 
                         if (Time.time >= _next3DResyncAllowedTime)
@@ -159,34 +168,19 @@ public class TargetManager : MonoBehaviour
                     }
                 }
 
-                // Push into 2D marker if it exists/ready
+                // Always keep 2D marker location current.
                 Update2DMarkerLocationSafe(lon, lat);
             }
         }
 
-        // Arrival / found should be based on 3D world position (elevation-aware).
-        // If 3D marker isn't active, do nothing (we don't want 2D-only "found").
+        // 3) Arrival / found must be GEO-only (world units are not meters; tileset scale/elevation can drift).
         if (!enableArrivalRespawn) return;
-        if (playerRoot == null) return;
-        if (_marker3D == null || !_marker3D.enabled || _marker3D.transform == null) return;
 
-        Vector3 p = _marker3D.transform.position;
-        if (p == Vector3.zero) return;
-
-        // NOTE: do NOT write to marker transform each frame here (OM may also move it).
-        // Instead, apply offsets only for the measurement.
-        float yVisual = targetVisualYOffset;
-        float yExtra = targetExtraYOffset;
-
-        Vector3 measure = new Vector3(p.x, p.y + yVisual + yExtra, p.z);
-
-        // Unity world distance (units)
-        float dWorld = Vector3.Distance(playerRoot.position, measure);
-
-        // Geo distance (meters) — this is what we expose to UI
         _lastDistanceMeters = ComputeDistanceMeters();
 
-        if (Time.time >= _nextFoundAllowedTime && _lastDistanceMeters > 0f && _lastDistanceMeters <= foundRadiusMeters)
+        if (Time.time >= _nextFoundAllowedTime &&
+            _lastDistanceMeters > 0f &&
+            _lastDistanceMeters <= foundRadiusMeters)
         {
             _nextFoundAllowedTime = Time.time + foundCooldownSeconds;
 
@@ -195,8 +189,9 @@ public class TargetManager : MonoBehaviour
 
             RequestRespawn();
         }
-
     }
+
+
 
     // ---------------------------
     // Mode hooks
@@ -205,6 +200,10 @@ public class TargetManager : MonoBehaviour
     public void OnEnter2D(Map map2D)
     {
         _in2DMode = true;
+
+        // Auto-wire 2D marker manager if missing
+        if (markerManager2D == null && map2D != null)
+            markerManager2D = map2D.GetComponentInChildren<Marker2DManager>(true);
 
         EnsureTarget(map2D);
 
@@ -236,6 +235,8 @@ public class TargetManager : MonoBehaviour
 
         if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
         _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
+
+
     }
 
     // ---------------------------
@@ -321,7 +322,6 @@ public class TargetManager : MonoBehaviour
 
     private void ApplyNewTarget(double tLat, double tLon, double baseLat, double baseLon)
     {
-        // If run is over, don't apply
         if (!_runActive || _targetsSpawnedThisRun >= targetsPerRun) return;
 
         currentTarget = new TargetActor(TargetType.STATIONARY, tLat, tLon)
@@ -332,7 +332,6 @@ public class TargetManager : MonoBehaviour
         _targetsSpawnedThisRun++;
         OnRunProgressChanged?.Invoke(_targetsSpawnedThisRun, targetsPerRun);
 
-        // Seed patrol
         if (enablePatrol && patrolManager != null)
         {
             patrolManager.legMeters = patrolLegMeters;
@@ -346,7 +345,6 @@ public class TargetManager : MonoBehaviour
             Debug.Log($"[TargetHunt] Spawned target #{_targetsSpawnedThisRun}/{targetsPerRun} geoDist≈{approxGeo:F0}m @ ({tLat:F6},{tLon:F6})");
         }
 
-        // If we're in 3D, kick a proper sync (now that currentTarget is committed)
         if (!_in2DMode)
         {
             if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
@@ -356,8 +354,6 @@ public class TargetManager : MonoBehaviour
 
     private (double lat, double lon) GenerateRandomGeoOffset(double lat0, double lon0)
     {
-        // If we have bounds, prefer directions that keep us inside the box.
-        // Try a bunch of candidates; accept first that lands inside bounds.
         const int attempts = 24;
 
         for (int i = 0; i < attempts; i++)
@@ -380,11 +376,9 @@ public class TargetManager : MonoBehaviour
             }
         }
 
-        // Fallback: if we're boxed-in somehow, clamp the player's location into the bounds
         if (_hasBounds)
             return ClampIntoBounds(lat0, lon0);
 
-        // Final fallback (unbounded)
         double t = Random.value * System.Math.PI * 2.0;
         float d = Mathf.Max(spawnDistanceMeters, spawnMinDistanceMeters);
         double n = System.Math.Cos(t) * d;
@@ -406,7 +400,6 @@ public class TargetManager : MonoBehaviour
 
     private int PickDirectionBin(double pLat, double pLon)
     {
-        // If no bounds, just pick any bin, avoid immediate repeat.
         if (!_hasBounds)
         {
             int b = Random.Range(0, 8);
@@ -414,7 +407,6 @@ public class TargetManager : MonoBehaviour
             return b;
         }
 
-        // Margin near edge where we start “pushing inward”
         const double marginM = 70.0;
 
         double toNorthM = TargetGeoUtil.ApproxMetersBetween(pLat, pLon, _maxLat, pLon);
@@ -427,8 +419,6 @@ public class TargetManager : MonoBehaviour
         bool banE = toEastM < marginM;
         bool banW = toWestM < marginM;
 
-        // Candidate bins, filtered by edge bans
-        // bins: 0=N,1=NE,2=E,3=SE,4=S,5=SW,6=W,7=NW
         var cand = new System.Collections.Generic.List<int>(8);
 
         for (int b = 0; b < 8; b++)
@@ -448,7 +438,6 @@ public class TargetManager : MonoBehaviour
             cand.Add(b);
         }
 
-        // If filtered everything, relax bans (still avoid repeat if possible)
         if (cand.Count == 0)
         {
             for (int b = 0; b < 8; b++)
@@ -464,8 +453,6 @@ public class TargetManager : MonoBehaviour
 
     private static double BinToBearingRad(int bin)
     {
-        // 0=N,2=E,4=S,6=W
-        // Using: north=cos(bearing)*d, east=sin(bearing)*d
         return (System.Math.PI / 4.0) * bin;
     }
 
@@ -475,30 +462,39 @@ public class TargetManager : MonoBehaviour
         return !(System.Math.Abs(currentTarget._Lat) < 1e-9 && System.Math.Abs(currentTarget._Lon) < 1e-9);
     }
 
+    private static bool IsValidLatLon(double lat, double lon)
+    {
+        if (double.IsNaN(lat) || double.IsNaN(lon)) return false;
+        if (double.IsInfinity(lat) || double.IsInfinity(lon)) return false;
+        if (lat < -90 || lat > 90) return false;
+        if (lon < -180 || lon > 180) return false;
+
+        // Treat (0,0) as invalid for our app context.
+        if (System.Math.Abs(lat) < 1e-9 && System.Math.Abs(lon) < 1e-9) return false;
+
+        return true;
+    }
+
     private bool TryGetPlayerLatLon(Map map2D, out double lat, out double lon)
     {
-        // Best source: SonusLocationState (if your system is updating it correctly)
+        // 3D mode: ONLY accept SonusLocationState (which is driven by OLMGeoMapper).
+        if (!_in2DMode)
+        {
+            lat = SonusLocationState.Lat;
+            lon = SonusLocationState.Lng;
+            return IsValidLatLon(lat, lon);
+        }
+
+        // 2D mode: accept SonusLocationState if valid, otherwise fall back to map center.
         lat = SonusLocationState.Lat;
         lon = SonusLocationState.Lng;
-        if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
-            return true;
+        if (IsValidLatLon(lat, lon)) return true;
 
-        // Fallback: 2D map center
         if (map2D != null)
         {
             lon = map2D.view.center.x;
             lat = map2D.view.center.y;
-            if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
-                return true;
-        }
-
-        // Last resort: defaults
-        if (sceneController != null)
-        {
-            lat = sceneController.defaultLatitude;
-            lon = sceneController.defaultLongitude;
-            if (System.Math.Abs(lat) > 1e-9 || System.Math.Abs(lon) > 1e-9)
-                return true;
+            return IsValidLatLon(lat, lon);
         }
 
         lat = lon = 0;
@@ -518,14 +514,14 @@ public class TargetManager : MonoBehaviour
     private void Update2DMarkerLocationSafe(double lon, double lat)
     {
         if (_marker2D == null) return;
-        if (!_in2DMode) return; // only redraw when user is looking at 2D
         if (!Is2DReady()) return;
 
         Ensure2DManagerSingleton();
 
         _marker2D.location = new GeoPoint(lon, lat);
 
-        if (markerManager2D != null && markerManager2D.map != null && Time.time >= _next2DRedrawTime)
+        // Only redraw if user is looking at 2D (performance).
+        if (_in2DMode && markerManager2D != null && markerManager2D.map != null && Time.time >= _next2DRedrawTime)
         {
             _next2DRedrawTime = Time.time + (1f / Mathf.Max(1f, map2DRedrawHz));
             markerManager2D.map.Redraw();
@@ -541,7 +537,6 @@ public class TargetManager : MonoBehaviour
         if (map == null) return false;
         if (!map.gameObject.activeInHierarchy) return false;
 
-        // Must have a 2D control and it must be active/enabled
         var ctrl = map.control;
         if (ctrl == null) return false;
         if (!ctrl.enabled) return false;
@@ -552,10 +547,8 @@ public class TargetManager : MonoBehaviour
 
     private IEnumerator Recreate2DMarkerWhenReady()
     {
-        // If we aren't actually in 2D mode anymore, don't create 2D markers.
         if (!_in2DMode) yield break;
 
-        // OnlineMaps often needs EndOfFrame to initialize marker buffers after re-activation
         yield return null;
         yield return new WaitForEndOfFrame();
         yield return null;
@@ -583,7 +576,6 @@ public class TargetManager : MonoBehaviour
 
         Ensure2DManagerSingleton();
 
-        // Remove prior marker
         SafeRemove2DMarker();
 
         try
@@ -674,13 +666,11 @@ public class TargetManager : MonoBehaviour
             _marker3D.sizeType = Marker3D.SizeType.scene;
         }
 
-        // Ensure the marker GO is visible (safe) before update
         if (_marker3D.transform != null)
             _marker3D.transform.gameObject.SetActive(true);
 
         _marker3D.location = new GeoPoint(currentTarget._Lon, currentTarget._Lat);
 
-        // Only set enabled when turning ON (disabling via enabled can throw in some OM lifecycles)
         try { _marker3D.enabled = true; } catch { }
 
         try
@@ -693,7 +683,6 @@ public class TargetManager : MonoBehaviour
             yield break;
         }
 
-        // Let OM resolve transform
         for (int i = 0; i < 10; i++) yield return null;
 
         _marker3DReady = (_marker3D != null && _marker3D.enabled && _marker3D.transform != null);
@@ -708,18 +697,13 @@ public class TargetManager : MonoBehaviour
 
         try
         {
-            // Prefer toggling the marker instance GO over Marker3D.enabled, because enabled can NRE during mode teardown.
             if (_marker3D.transform != null)
                 _marker3D.transform.gameObject.SetActive(enabled);
 
-            // Only toggle enabled when turning ON. Turning OFF via enabled has NRE'd for you.
             if (enabled)
                 _marker3D.enabled = true;
         }
-        catch
-        {
-            // OM may be mid-teardown; ignore and let next Enter3D resync.
-        }
+        catch { }
 
         if (!enabled) _marker3DReady = false;
     }
@@ -730,7 +714,6 @@ public class TargetManager : MonoBehaviour
 
     private void Ensure2DManagerSingleton()
     {
-        // NOTE: Do not require Is2DReady here; we call this only when we already validated readiness.
         if (markerManager2D == null) return;
 
         var t = typeof(Marker2DManager);
@@ -744,12 +727,10 @@ public class TargetManager : MonoBehaviour
 
     private IEnumerator RespawnFlow()
     {
-        // Hide 3D marker safely (don't disable via OM)
         Set3DEnabled(false);
 
         currentTarget = null;
 
-        // If we've already spawned the full run, complete it now.
         if (_targetsSpawnedThisRun >= targetsPerRun)
         {
             _runActive = false;
@@ -764,22 +745,18 @@ public class TargetManager : MonoBehaviour
 
         EnsureTarget(sceneController != null ? sceneController.map2D : null);
 
-        // Re-arm patrol route for the new target
         if (enablePatrol && patrolManager != null && HasValidTarget())
             patrolManager.AssignRoute(currentTarget._Lat, currentTarget._Lon);
 
-        // If we're in 2D, re-create marker safely (deferred). If we're in 3D, leave 2D alone.
         if (_in2DMode)
             Kick2DMarkerCreateIf2DActive();
 
-        // If we're in 3D, resync the 3D marker
         if (!_in2DMode)
         {
             if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
             _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
         }
 
-        // Give marker sync a moment (non-blocking) — avoids reticle flicker on instant respawn
         yield return null;
 
         _isRespawning = false;
@@ -793,7 +770,7 @@ public class TargetManager : MonoBehaviour
         if (_marker3D == null || !_marker3D.enabled || _marker3D.transform == null) return false;
 
         pos = _marker3D.transform.position;
-        return pos != Vector3.zero;
+        return true;
     }
 
     public void RequestRespawn()
@@ -804,13 +781,9 @@ public class TargetManager : MonoBehaviour
     }
 
     // ---------------------------
-    // Helpers
+    // Public helpers
     // ---------------------------
-    private float _lastDistanceMeters = -1f;
-    /// <summary>
-    /// Returns the last computed target distance in meters.
-    /// Falls back to computing from lat/lon if needed.
-    /// </summary>
+
     public float DistanceToTargetMeters()
     {
         if (currentTarget == null) return float.PositiveInfinity;
@@ -828,10 +801,7 @@ public class TargetManager : MonoBehaviour
     {
         return TryGetPlayerLatLon(sceneController != null ? sceneController.map2D : null, out lat, out lon);
     }
-    /// <summary>
-    /// Compute distance in meters using lat/lon (player vs target).
-    /// This avoids Unity world scale issues with TileSet size.
-    /// </summary>
+
     private float ComputeDistanceMeters()
     {
         if (currentTarget == null) return -1f;
@@ -842,8 +812,6 @@ public class TargetManager : MonoBehaviour
         double m = TargetGeoUtil.ApproxMetersBetween(pLat, pLon, currentTarget._Lat, currentTarget._Lon);
         return (float)m;
     }
-
-
 
     private static T FindAny<T>() where T : Object
     {

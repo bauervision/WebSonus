@@ -1351,7 +1351,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1278132610}
         m_TargetAssemblyTypeName: SonusMapSceneController, Sonus.Web
-        m_MethodName: ToggleMode
+        m_MethodName: EnterMapMode
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -1366,7 +1366,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1278132610}
         m_TargetAssemblyTypeName: SonusMapSceneController, Sonus.Web
-        m_MethodName: ToggleMode
+        m_MethodName: EnterSceneMode
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -1816,28 +1816,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51046a2841e6d1144a69b7e7768cdab0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Sonus.Web::SonusMapSceneController
-  mapModeRoot: {fileID: 1661845403}
-  sceneModeRoot: {fileID: 1499806378}
+  map2DRoot: {fileID: 1661845403}
+  scene3DRoot: {fileID: 1499806378}
+  map2D: {fileID: 1243300615}
+  marker2DManager: {fileID: 1243300613}
+  playerMarkerTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
+  playerMarkerScale: 1
+  zoom2D: 17
+  playerRoot: {fileID: 1003238712}
+  geoMapper3D: {fileID: 660818620}
+  playerSpawnYOffset: 1.8
   targetManager: {fileID: 1519239689}
+  locationDriver: {fileID: 1869332112}
   defaultLatitude: 37.3045
   defaultLongitude: -80.6115
-  map2D: {fileID: 1243300615}
-  mapCamera: {fileID: 961739752}
-  zoom2D: 17
-  userMarkerTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
-  userMarkerScale: 1
-  rotate2DMarkerWithPlayer: 1
-  markerIconOffsetDeg: 180
-  map3D: {fileID: 636010315}
-  map3DControl: {fileID: 636010312}
-  sceneCamera: {fileID: 1003238716}
-  playerRoot: {fileID: 1003238712}
-  zoom3D: 16
-  playerSpawnHeight: 2
-  useHiddenSpawnProbe: 1
-  geoMapperOL: {fileID: 660818620}
-  debugLogGeoEachSecond: 0
-  debugLogSwitchSummary: 0
+  debugLogs: 1
 --- !u!4 &1278132611
 Transform:
   m_ObjectHideFlags: 0
@@ -2241,6 +2234,52 @@ Transform:
   - {fileID: 1338090578}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1869332111
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1869332113}
+  - component: {fileID: 1869332112}
+  m_Layer: 0
+  m_Name: Sonus Location Driver
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1869332112
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1869332111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 976dda61be4fc3b48a7c091e3faae668, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::SonusLocationDriver
+  geoMapper: {fileID: 660818620}
+  debugLogs: 0
+--- !u!4 &1869332113
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1869332111}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -167.49184, y: 2459.6997, z: -45.92752}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2116198337
 GameObject:
   m_ObjectHideFlags: 0
@@ -2319,3 +2358,4 @@ SceneRoots:
   - {fileID: 1278132611}
   - {fileID: 1519239688}
   - {fileID: 660818621}
+  - {fileID: 1869332113}

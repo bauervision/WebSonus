@@ -1,3 +1,4 @@
+// Assets/Sonus/Core/SonusLocationState.cs
 namespace Sonus.Core
 {
     /// <summary>
