@@ -14,7 +14,7 @@ public class SonusLocationDriver : MonoBehaviour
     public Transform headingSource;
 
     [Tooltip("Apply a constant offset to heading. If map is flipped north/south, set to 180.")]
-    public float headingOffsetDeg = 180f;
+    public float headingOffsetDeg = 0f;
 
     [Header("Debug")]
     public bool debugLogs;
@@ -53,7 +53,7 @@ public class SonusLocationDriver : MonoBehaviour
 
                     // Compass heading: 0=N, 90=E
                     float raw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
-                    float h = (raw + headingOffsetDeg) % 360f;
+                    float h = raw % 360f;
                     if (h < 0f) h += 360f;
                     heading = h;
                 }

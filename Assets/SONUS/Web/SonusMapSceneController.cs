@@ -168,7 +168,11 @@ public class SonusMapSceneController : MonoBehaviour
     {
         // If we are about to leave 3D, capture current facing.
         if (next == Mode.Map2D && _mode == Mode.Scene3D && playerRoot != null)
-            _lastPlayerYawDeg = playerRoot.eulerAngles.y;
+        {
+            float yaw = playerRoot.eulerAngles.y;
+            _lastPlayerYawDeg = Mathf.Repeat(yaw + 180f, 360f);
+        }
+
 
         _mode = next;
 
@@ -251,12 +255,14 @@ public class SonusMapSceneController : MonoBehaviour
 
     private void Sync2DUserHeading(float yawDeg)
     {
-        // NEW: rotation sync
-        if (_userMarker2D != null && SonusPlayerGeoState.HasHeading)
-        {
-            TrySetMarker2DRotation(_userMarker2D, (float)SonusPlayerGeoState.HeadingDeg);
-        }
+        if (_userMarker2D == null) return;
+
+        // Prefer the captured yaw from 3D exit (stable).
+        float h = Mathf.Repeat(yawDeg, 360f);
+
+        TrySetMarker2DRotation(_userMarker2D, h);
     }
+
 
     // ----------------------------
     // 3D
@@ -434,34 +440,49 @@ public class SonusMapSceneController : MonoBehaviour
     {
         if (m == null) return;
 
-        // OnlineMaps versions vary: try common property/field names.
+        deg = Mathf.Repeat(deg, 360f);
+
         var t = m.GetType();
 
-        // property: rotation
+        // Prefer explicit degree-based APIs if they exist
+        var pDeg =
+            t.GetProperty("rotationDegree", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? t.GetProperty("rotationDegrees", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        if (pDeg != null && pDeg.PropertyType == typeof(float) && pDeg.CanWrite)
+        {
+            pDeg.SetValue(m, deg);
+            return;
+        }
+
+        var fDeg =
+            t.GetField("rotationDegree", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? t.GetField("rotationDegrees", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        if (fDeg != null && fDeg.FieldType == typeof(float))
+        {
+            fDeg.SetValue(m, deg);
+            return;
+        }
+
+        // Fallback: "rotation" is normalized turns (0..1) in your build.
+        float turns = deg / 360f;
+
         var pRot = t.GetProperty("rotation", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         if (pRot != null && pRot.PropertyType == typeof(float) && pRot.CanWrite)
         {
-            pRot.SetValue(m, deg);
+            pRot.SetValue(m, turns);
             return;
         }
 
-        // property: rotationDegree / rotationDegrees
-        var pRotD = t.GetProperty("rotationDegree", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                ?? t.GetProperty("rotationDegrees", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (pRotD != null && pRotD.PropertyType == typeof(float) && pRotD.CanWrite)
-        {
-            pRotD.SetValue(m, deg);
-            return;
-        }
-
-        // field: rotation
         var fRot = t.GetField("rotation", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         if (fRot != null && fRot.FieldType == typeof(float))
         {
-            fRot.SetValue(m, deg);
+            fRot.SetValue(m, turns);
             return;
         }
     }
+
 
 
 
