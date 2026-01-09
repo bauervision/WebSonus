@@ -27,6 +27,13 @@ public class SonusMapSceneController : MonoBehaviour
     public Texture2D userMarkerTexture;
     public float userMarkerScale = 1f;
 
+    private float _next2DFollowT;
+    [Header("2D Follow")]
+    public bool followUserIn2D = true;
+    public float follow2DHz = 15f; // 10–20 feels good
+    public bool centerMapOnUserIn2D = false; // leave off if you want manual panning
+
+
     [Header("3D Map")]
     public Map map3D;
     public ControlBase3D map3DControl;
@@ -71,6 +78,8 @@ public class SonusMapSceneController : MonoBehaviour
     // Optional aliases in case your buttons referenced these names:
     public void EnterMapModeButton() => SetMode(Mode.Map2D);
     public void EnterSceneModeButton() => SetMode(Mode.Scene3D);
+    private float _lastPlayerYawDeg;
+
 
 
     private void Awake()
@@ -116,6 +125,32 @@ public class SonusMapSceneController : MonoBehaviour
         SetMode(Mode.Map2D, immediate: true);
     }
 
+    private void Update()
+    {
+        // Only do continuous follow in 2D mode
+        if (!IsIn2DMode) return;
+        if (!followUserIn2D) return;
+        if (map2D == null || map2D.view == null) return;
+        if (_userMarker2D == null) return; // created in Enter2D
+
+        if (Time.time < _next2DFollowT) return;
+        _next2DFollowT = Time.time + (1f / Mathf.Max(1f, follow2DHz));
+
+        if (!SonusLocationState.HasValue) return;
+
+        float lat = (float)SonusLocationState.Lat;
+        float lng = (float)SonusLocationState.Lng;
+
+        // Update marker position
+        Sync2DUserMarker(lng, lat);
+
+        // Optional: keep the map centered on the user
+        if (centerMapOnUserIn2D)
+            map2D.view.SetCenter(lng, lat, map2D.view.zoom);
+
+        map2D.Redraw();
+    }
+
     public void ToggleMode()
     {
         SetMode(_mode == Mode.Map2D ? Mode.Scene3D : Mode.Map2D);
@@ -131,6 +166,10 @@ public class SonusMapSceneController : MonoBehaviour
 
     private IEnumerator SetModeRoutine(Mode next, bool immediate)
     {
+        // If we are about to leave 3D, capture current facing.
+        if (next == Mode.Map2D && _mode == Mode.Scene3D && playerRoot != null)
+            _lastPlayerYawDeg = playerRoot.eulerAngles.y;
+
         _mode = next;
 
         bool is2D = _mode == Mode.Map2D;
@@ -179,6 +218,7 @@ public class SonusMapSceneController : MonoBehaviour
         map2D.view.SetCenter((float)lng, (float)lat, zoom2D);
         Ensure2DUserMarker((float)lng, (float)lat);
         Sync2DUserMarker((float)lng, (float)lat);
+        Sync2DUserHeading(_lastPlayerYawDeg);
 
         map2D.Redraw();
 
@@ -207,6 +247,15 @@ public class SonusMapSceneController : MonoBehaviour
     {
         if (_userMarker2D == null) return;
         _userMarker2D.location = new GeoPoint(lng, lat);
+    }
+
+    private void Sync2DUserHeading(float yawDeg)
+    {
+        // NEW: rotation sync
+        if (_userMarker2D != null && SonusPlayerGeoState.HasHeading)
+        {
+            TrySetMarker2DRotation(_userMarker2D, (float)SonusPlayerGeoState.HeadingDeg);
+        }
     }
 
     // ----------------------------
@@ -377,6 +426,40 @@ public class SonusMapSceneController : MonoBehaviour
         else
         {
             audioManager?.StopSonic();
+        }
+    }
+
+
+    private static void TrySetMarker2DRotation(Marker2D m, float deg)
+    {
+        if (m == null) return;
+
+        // OnlineMaps versions vary: try common property/field names.
+        var t = m.GetType();
+
+        // property: rotation
+        var pRot = t.GetProperty("rotation", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (pRot != null && pRot.PropertyType == typeof(float) && pRot.CanWrite)
+        {
+            pRot.SetValue(m, deg);
+            return;
+        }
+
+        // property: rotationDegree / rotationDegrees
+        var pRotD = t.GetProperty("rotationDegree", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                ?? t.GetProperty("rotationDegrees", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (pRotD != null && pRotD.PropertyType == typeof(float) && pRotD.CanWrite)
+        {
+            pRotD.SetValue(m, deg);
+            return;
+        }
+
+        // field: rotation
+        var fRot = t.GetField("rotation", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (fRot != null && fRot.FieldType == typeof(float))
+        {
+            fRot.SetValue(m, deg);
+            return;
         }
     }
 

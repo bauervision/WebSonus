@@ -25,6 +25,11 @@ public class TargetManager : MonoBehaviour
     [Tooltip("Prefab used by OnlineMaps Marker3D. Keep it small/simple.")]
     public GameObject targetPrefab;
 
+    [Header("3D Target Visual")]
+    public GameObject targetVisualPrefab;
+    public Vector3 targetVisualOffset = new Vector3(0f, 0f, 0f);
+    private Transform _targetVisual;
+
     [Tooltip("Extra Y offset for distance checks (world units).")]
     public float targetExtraYOffset = 0.2f;
 
@@ -485,19 +490,15 @@ public class TargetManager : MonoBehaviour
 
     private bool TryGetPlayerLatLon(Map map2D, out double lat, out double lon)
     {
-        // 3D mode: ONLY accept SonusLocationState (which is driven by OLMGeoMapper).
-        if (!_in2DMode)
+        // Prefer authoritative player geo (3D-derived) in ALL modes if available.
+        if (SonusPlayerGeoState.HasValue)
         {
-            lat = SonusLocationState.Lat;
-            lon = SonusLocationState.Lng;
+            lat = SonusPlayerGeoState.Lat;
+            lon = SonusPlayerGeoState.Lng;
             return IsValidLatLon(lat, lon);
         }
 
-        // 2D mode: accept SonusLocationState if valid, otherwise fall back to map center.
-        lat = SonusLocationState.Lat;
-        lon = SonusLocationState.Lng;
-        if (IsValidLatLon(lat, lon)) return true;
-
+        // 2D fallback: map center (only if we truly have no player geo)
         if (map2D != null)
         {
             lon = map2D.view.center.x;
@@ -508,6 +509,7 @@ public class TargetManager : MonoBehaviour
         lat = lon = 0;
         return false;
     }
+
 
     // ---------------------------
     // 2D marker (safe create + update)
@@ -638,6 +640,22 @@ public class TargetManager : MonoBehaviour
     // 3D marker
     // ---------------------------
 
+    private void Ensure3DTargetVisual()
+    {
+        if (targetVisualPrefab == null) return;
+        if (_marker3D == null || _marker3D.transform == null) return;
+
+        var existing = _marker3D.transform.Find("TargetVisual");
+        if (existing != null) return;
+
+        var vis = Instantiate(targetVisualPrefab, _marker3D.transform);
+        vis.name = "TargetVisual";
+        vis.transform.localPosition = Vector3.zero;          // or (0,2,0) if needed
+        vis.transform.localRotation = Quaternion.identity;
+        vis.transform.localScale = Vector3.one;
+    }
+
+
     private IEnumerator Ensure3DMarkerAndSync()
     {
         if (currentTarget == null) yield break;
@@ -664,7 +682,8 @@ public class TargetManager : MonoBehaviour
                 yield break;
             }
 
-            _marker3D = Marker3DManager.CreateItem(0, 0, targetPrefab, "target-3d");
+            _marker3D = Marker3DManager.CreateItem(currentTarget._Lon, currentTarget._Lat, targetPrefab, "target-3d");
+
             if (_marker3D == null)
             {
                 Debug.LogWarning("[TargetHunt] 3D CreateItem returned null.");
@@ -672,10 +691,15 @@ public class TargetManager : MonoBehaviour
             }
 
             _marker3D.sizeType = Marker3D.SizeType.scene;
+
+
         }
 
         if (_marker3D.transform != null)
             _marker3D.transform.gameObject.SetActive(true);
+
+        // NEW: always ensure the child exists
+        Ensure3DTargetVisual();
 
         _marker3D.location = new GeoPoint(currentTarget._Lon, currentTarget._Lat);
 
@@ -690,6 +714,7 @@ public class TargetManager : MonoBehaviour
             if (debugLogs) Debug.LogWarning("[TargetHunt] Marker3D.Update threw during sync; will retry next Enter3D.");
             yield break;
         }
+
 
         for (int i = 0; i < 10; i++) yield return null;
 
@@ -798,14 +823,18 @@ public class TargetManager : MonoBehaviour
     {
         if (currentTarget == null) return float.PositiveInfinity;
 
-        if (!TryGetPlayerLatLon(sceneController != null ? sceneController.map2D : null, out double pLat, out double pLon))
+        if (!Sonus.Core.SonusPlayerGeoState.HasValue)
             return float.PositiveInfinity;
+
+        double pLat = Sonus.Core.SonusPlayerGeoState.Lat;
+        double pLon = Sonus.Core.SonusPlayerGeoState.Lng;
 
         double tLat = currentTarget._Lat;
         double tLon = currentTarget._Lon;
 
         return (float)TargetGeoUtil.ApproxMetersBetween(pLat, pLon, tLat, tLon);
     }
+
 
     public bool TryGetPlayerLatLonForUI(out double lat, out double lon)
     {

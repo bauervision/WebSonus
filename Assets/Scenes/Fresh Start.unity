@@ -1849,6 +1849,9 @@ MonoBehaviour:
   zoom2D: 17
   userMarkerTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
   userMarkerScale: 1
+  followUserIn2D: 1
+  follow2DHz: 15
+  centerMapOnUserIn2D: 0
   map3D: {fileID: 636010315}
   map3DControl: {fileID: 636010312}
   sceneCamera: {fileID: 1003238716}
@@ -2364,6 +2367,8 @@ MonoBehaviour:
   targetMarkerTexture: {fileID: 2800000, guid: 3c6de7b00b0c67645bbd3d6f600dca05, type: 3}
   targetMarkerScale: 0.23
   targetPrefab: {fileID: 2014764952472726877, guid: f1e4617076ac09b4e835074ac29bc0c7, type: 3}
+  targetVisualPrefab: {fileID: 3528608885589663502, guid: f3649ded15c24f847897bff6c1fb1010, type: 3}
+  targetVisualOffset: {x: 0, y: 0, z: 0}
   targetExtraYOffset: 0.2
   targetVisualYOffset: 0
   enablePatrol: 1
@@ -2602,6 +2607,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Sonus.Web::SonusLocationDriver
   geoMapper: {fileID: 660818620}
   scene: {fileID: 1278132610}
+  headingSource: {fileID: 0}
+  headingOffsetDeg: 180
   debugLogs: 0
 --- !u!4 &1869332113
 Transform:
