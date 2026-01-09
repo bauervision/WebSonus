@@ -34,12 +34,24 @@ public class SonusMapSceneController : MonoBehaviour
     public Transform playerRoot;
     public int zoom3D = 16;
 
+    [Header("3D Elevation Probe (player)")]
+    public GameObject playerProbePrefab;     // tiny empty prefab (can be invisible)
+    public float playerGroundOffset = 1.8f;  // how high above surface to place player
+    public int probeWarmupFrames = 10;       // frames to wait after Update()
+    public float probeTimeoutSeconds = 2.0f; // max wait for tileset resolve
+
+    private Marker3D _playerProbe3D;
+
     [Header("Geo Mapping (3D)")]
     [Tooltip("Assign the OLMGeoMapper wired to the SAME 3D Map + 3D Control.")]
     public OLMGeoMapper geoMapperOL;
 
     [Header("Targets")]
     public TargetManager targetManager;
+
+    [Header("Sonic")]
+    [SerializeField] private bool sonicEnabled = true; // driven by your single toggle button
+    public AudioManager audioManager;
 
     [Header("Debug")]
     public bool debugLogs = true;
@@ -111,6 +123,8 @@ public class SonusMapSceneController : MonoBehaviour
 
     public void SetMode(Mode next, bool immediate = false)
     {
+        audioManager.StopSonic();
+
         if (_modeRoutine != null) StopCoroutine(_modeRoutine);
         _modeRoutine = StartCoroutine(SetModeRoutine(next, immediate));
     }
@@ -129,8 +143,22 @@ public class SonusMapSceneController : MonoBehaviour
         if (!immediate)
             yield return null;
 
-        if (is2D) Enter2D();
-        else yield return Enter3D();
+        if (is2D)
+        {
+            Enter2D();
+            audioManager.StopSonic(); // always off in Map mode
+        }
+        else
+        {
+            yield return Enter3D();    // wait until 3D is ready (player placed, targets synced)
+
+            if (sonicEnabled)
+            {
+                audioManager.StartSonic();
+                audioManager.HearNow(); // <-- force immediate cue (don’t wait 30s)
+            }
+        }
+
     }
 
     // ----------------------------
@@ -194,8 +222,8 @@ public class SonusMapSceneController : MonoBehaviour
 
         // Choose best-known location (must be non-zero)
         double lat = (SonusLocationState.HasValue && !IsZeroZero(SonusLocationState.Lat, SonusLocationState.Lng))
-    ? SonusLocationState.Lat
-    : defaultLatitude;
+            ? SonusLocationState.Lat
+            : defaultLatitude;
 
         double lng = (SonusLocationState.HasValue && !IsZeroZero(SonusLocationState.Lat, SonusLocationState.Lng))
             ? SonusLocationState.Lng
@@ -209,19 +237,8 @@ public class SonusMapSceneController : MonoBehaviour
         yield return null;
         yield return null;
 
-        // Place player using mapper (elevation-aware when available)
-        if (playerRoot != null && geoMapperOL != null)
-        {
-            Vector3 w = geoMapperOL.LatLonToWorld(lat, lng, extraYOffset: 0f);
-            if (w != Vector3.zero)
-            {
-                playerRoot.position = w;
-            }
-            else if (debugLogs)
-            {
-                Debug.LogWarning("[SONUS] geoMapperOL.LatLonToWorld returned Vector3.zero (mapper not ready?)");
-            }
-        }
+        // Place player using 3D probe marker (MOST reliable Y)
+        yield return StartCoroutine(PlacePlayerUsing3DProbe(lat, lng));
 
         // Now allow targets to create/sync their 3D marker
         if (targetManager != null)
@@ -230,6 +247,140 @@ public class SonusMapSceneController : MonoBehaviour
         if (debugLogs)
             Debug.Log($"[SONUS] Enter3D @ ({lat:F6},{lng:F6}) z={zoom3D}");
     }
+
+    private IEnumerator PlacePlayerUsing3DProbe(double lat, double lng)
+    {
+        if (playerRoot == null) yield break;
+
+        // Wait for Marker3DManager
+        float t0 = Time.realtimeSinceStartup;
+        while (Marker3DManager.instance == null && Time.realtimeSinceStartup - t0 < probeTimeoutSeconds)
+            yield return null;
+
+        if (Marker3DManager.instance == null)
+        {
+            if (debugLogs) Debug.LogWarning("[SONUS] Marker3DManager.instance not ready; cannot place player by probe.");
+            yield break;
+        }
+
+        // Create probe marker if needed
+        if (_playerProbe3D == null)
+        {
+            GameObject probeGO =
+                playerProbePrefab != null
+                    ? playerProbePrefab
+                    : CreateRuntimeProbeGO();
+
+            _playerProbe3D = Marker3DManager.CreateItem(0, 0, probeGO, "player-probe-3d");
+            if (_playerProbe3D == null)
+            {
+                if (debugLogs) Debug.LogWarning("[SONUS] CreateItem for player probe returned null.");
+                yield break;
+            }
+
+            _playerProbe3D.sizeType = Marker3D.SizeType.scene;
+        }
+
+        // Set geo (GeoPoint expects lon,lat)
+        _playerProbe3D.location = new GeoPoint(lng, lat);
+
+        // Ensure visible/active
+        if (_playerProbe3D.transform != null)
+            _playerProbe3D.transform.gameObject.SetActive(true);
+
+        try { _playerProbe3D.enabled = true; } catch { }
+
+        try { _playerProbe3D.Update(); }
+        catch
+        {
+            if (debugLogs) Debug.LogWarning("[SONUS] player probe Update() threw; tileset/control not ready.");
+            yield break;
+        }
+
+        // Warmup frames so OM can resolve transform
+        for (int i = 0; i < probeWarmupFrames; i++)
+            yield return null;
+
+        // Poll until valid pos or timeout
+        Vector3 pos = Vector3.zero;
+        float t1 = Time.realtimeSinceStartup;
+        while (Time.realtimeSinceStartup - t1 < probeTimeoutSeconds)
+        {
+            if (_playerProbe3D != null && _playerProbe3D.enabled && _playerProbe3D.transform != null)
+            {
+                pos = _playerProbe3D.transform.position;
+                if (pos != Vector3.zero) break;
+            }
+            yield return null;
+        }
+
+        if (pos == Vector3.zero)
+        {
+            if (debugLogs) Debug.LogWarning("[SONUS] player probe never resolved a valid world position (pos=0).");
+            yield break;
+        }
+
+        // Teleport safely (avoid gravity-fall artifacts)
+        var cc = playerRoot.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+
+        var rb = playerRoot.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.isKinematic = true;
+        }
+
+        playerRoot.position = pos + Vector3.up * playerGroundOffset;
+
+        if (rb != null) rb.isKinematic = false;
+        if (cc != null) cc.enabled = true;
+
+        if (debugLogs)
+            Debug.Log($"[SONUS] Player placed by probe @ world={pos} geo=({lat:F6},{lng:F6})");
+    }
+
+    private GameObject CreateRuntimeProbeGO()
+    {
+        var go = new GameObject("PlayerProbeRuntime");
+
+        // Make absolutely sure it renders nothing
+        foreach (var r in go.GetComponentsInChildren<Renderer>())
+            r.enabled = false;
+
+        // Defensive: remove anything unexpected
+        foreach (var c in go.GetComponents<Component>())
+        {
+            if (!(c is Transform))
+                Destroy(c);
+        }
+
+        return go;
+    }
+
+    // ----------------------------
+    // Audio connections
+    // ----------------------------
+    public void SetSonicEnabled(bool on)
+    {
+        sonicEnabled = on;
+
+        if (audioManager == null) audioManager = FindFirstObjectByType<AudioManager>();
+
+        // Only run sonic in Scene mode
+        if (_mode == Mode.Scene3D)
+        {
+            if (sonicEnabled) audioManager?.StartSonic();
+            else audioManager?.StopSonic();
+        }
+        else
+        {
+            audioManager?.StopSonic();
+        }
+    }
+
+
 
     // ----------------------------
     // OnlineMaps singleton nudges

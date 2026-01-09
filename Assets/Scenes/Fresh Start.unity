@@ -1361,6 +1361,18 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+      - m_Target: {fileID: 1278132610}
+        m_TargetAssemblyTypeName: SonusMapSceneController, Sonus.Web
+        m_MethodName: SetSonicEnabled
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   onDeactive:
     m_PersistentCalls:
       m_Calls:
@@ -1375,6 +1387,18 @@ MonoBehaviour:
           m_FloatArgument: 0
           m_StringArgument: 
           m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 1278132610}
+        m_TargetAssemblyTypeName: SonusMapSceneController, Sonus.Web
+        m_MethodName: SetSonicEnabled
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 1
         m_CallState: 2
 --- !u!114 &1091994361
 MonoBehaviour:
@@ -1816,21 +1840,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51046a2841e6d1144a69b7e7768cdab0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Sonus.Web::SonusMapSceneController
-  map2DRoot: {fileID: 1661845403}
-  scene3DRoot: {fileID: 1499806378}
-  map2D: {fileID: 1243300615}
-  marker2DManager: {fileID: 1243300613}
-  playerMarkerTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
-  playerMarkerScale: 1
-  zoom2D: 17
-  playerRoot: {fileID: 1003238712}
-  geoMapper3D: {fileID: 660818620}
-  playerSpawnYOffset: 1.8
-  targetManager: {fileID: 1519239689}
-  locationDriver: {fileID: 1869332112}
+  mapModeRoot: {fileID: 1661845403}
+  sceneModeRoot: {fileID: 1499806378}
   defaultLatitude: 37.3045
   defaultLongitude: -80.6115
-  debugLogs: 1
+  map2D: {fileID: 1243300615}
+  markerManager2D: {fileID: 1243300613}
+  zoom2D: 17
+  userMarkerTexture: {fileID: 2800000, guid: 75b3b6062d8318a45b8ee716a487b865, type: 3}
+  userMarkerScale: 1
+  map3D: {fileID: 636010315}
+  map3DControl: {fileID: 636010312}
+  sceneCamera: {fileID: 1003238716}
+  playerRoot: {fileID: 1003238712}
+  zoom3D: 16
+  playerProbePrefab: {fileID: 0}
+  playerGroundOffset: 1.8
+  probeWarmupFrames: 10
+  probeTimeoutSeconds: 2
+  geoMapperOL: {fileID: 660818620}
+  targetManager: {fileID: 1519239689}
+  sonicEnabled: 1
+  audioManager: {fileID: 1788478694}
+  debugLogs: 0
 --- !u!4 &1278132611
 Transform:
   m_ObjectHideFlags: 0
@@ -2060,6 +2092,193 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1338090577}
   m_Mesh: {fileID: 10209, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1493404342
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1493404346}
+  - component: {fileID: 1493404345}
+  - component: {fileID: 1493404344}
+  - component: {fileID: 1493404343}
+  m_Layer: 0
+  m_Name: Sphere
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!82 &1493404343
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1493404342}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 8300000, guid: d8c80e60f7c7e914193337d51b145d9a, type: 3}
+  m_PlayOnAwake: 0
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 1
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 42.1
+  Pan2D: 0
+  rolloffMode: 1
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!23 &1493404344
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1493404342}
+  m_Enabled: 0
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &1493404345
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1493404342}
+  m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!4 &1493404346
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1493404342}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 38.6}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1960842817}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1499806378
 GameObject:
   m_ObjectHideFlags: 0
@@ -2161,7 +2380,7 @@ MonoBehaviour:
   spawnMinDistanceMeters: 90
   constrainToStartViewBounds: 1
   boundsInsetMeters: 30
-  debugLogs: 1
+  debugLogs: 0
 --- !u!114 &1519239690
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2234,6 +2453,124 @@ Transform:
   - {fileID: 1338090578}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1788478693
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1788478695}
+  - component: {fileID: 1788478694}
+  m_Layer: 0
+  m_Name: AudioManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1788478694
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1788478693}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bc68c8160593d264fa3ef70567819db5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::AudioManager
+  sonus:
+    targetRange:
+      _10m: {fileID: 8300000, guid: 653412c333625f74faac1bd8f69913ab, type: 3}
+      _20m: {fileID: 8300000, guid: bf8a737f8c03337429c5f604cc29f039, type: 3}
+      _30m: {fileID: 8300000, guid: 6c06fb1f1c877c54a8c4384bf5b73cec, type: 3}
+      _40m: {fileID: 8300000, guid: 0a7eb5222f97bbb4d8586940410065ff, type: 3}
+      _50m: {fileID: 8300000, guid: 23eda5e677c838946bc286f1d89ef654, type: 3}
+      _60m: {fileID: 8300000, guid: d6798a1800c18a443be173f3052588b8, type: 3}
+      _70m: {fileID: 8300000, guid: 1e6a2865021031d419e225faf4d20238, type: 3}
+      _80m: {fileID: 8300000, guid: 073c45413dc22444494145407568a15b, type: 3}
+      _90m: {fileID: 8300000, guid: 01e490bc0415d6246a4a73d1fd17bd50, type: 3}
+      _100m: {fileID: 8300000, guid: 075e69ba9200d0e41bcfcb2286fd2079, type: 3}
+      _125m: {fileID: 8300000, guid: 98f9e2844c88d29469436a5e2ec7060b, type: 3}
+      _150m: {fileID: 8300000, guid: 6f2688867aaefee43a13cd2b59c9a61f, type: 3}
+      _175m: {fileID: 8300000, guid: 4c5b22431501e1b4d8a21cfeaf8e2398, type: 3}
+      _200m: {fileID: 8300000, guid: 6f96c467bde989445a232834c46ed15f, type: 3}
+      _250m: {fileID: 8300000, guid: 7598418b3876428419175642c6bcac23, type: 3}
+      _300m: {fileID: 8300000, guid: 2601a75f2068f4e41aa345334096d544, type: 3}
+      _350m: {fileID: 8300000, guid: 104a6dbe56516bf48b6bc78ad50482cb, type: 3}
+      _400m: {fileID: 8300000, guid: 766c0c9f7208c1e47bdc287a6f0e0ad2, type: 3}
+      _400Greater: {fileID: 8300000, guid: 2fdf685a270d0e040a7fd981d84b0aed, type: 3}
+      _500Greater: {fileID: 8300000, guid: a7a6b11dd32bffd48be1dd9b4ece244d, type: 3}
+      _1000Greater: {fileID: 8300000, guid: 1f304865ee881a64f9f3ef5b002679b3, type: 3}
+    targetMoving:
+      __north: {fileID: 8300000, guid: d8c80e60f7c7e914193337d51b145d9a, type: 3}
+      _northEast: {fileID: 8300000, guid: e5a084f4d061fc148ac3bbbf134ef441, type: 3}
+      _east: {fileID: 8300000, guid: 49f637663b85eac4fbde3a3222c1d290, type: 3}
+      _southEast: {fileID: 8300000, guid: 6b9c67696517e2b47aba003f48ddebf1, type: 3}
+      _south: {fileID: 8300000, guid: 2995b21a48962bc438884e8b316b8504, type: 3}
+      _southWest: {fileID: 8300000, guid: c3064a145abf22f43887aa4cdab380ea, type: 3}
+      _west: {fileID: 8300000, guid: 222b306351e1e954f873b346a5a4e369, type: 3}
+      _northWest: {fileID: 8300000, guid: 02b1a3a61e2681a4d88cbd2ccc75e798, type: 3}
+    _behindYou: {fileID: 8300000, guid: a8305cdffef2ff548bc90d3b59059f78, type: 3}
+    _straightAhead: {fileID: 8300000, guid: 01e54a6a80a25344e9d2fdd82099b00c, type: 3}
+    _directlyBehind: {fileID: 8300000, guid: fb58c4eec0901d64f8e48e2a17a79a27, type: 3}
+    _newStationary: {fileID: 8300000, guid: 1d356ac0073aa8b409fd3d0b0e43a117, type: 3}
+    _newDynamic: {fileID: 8300000, guid: 43811b9c41d10474eab77c6a7cb1fc67, type: 3}
+    _noTargets: {fileID: 8300000, guid: 38c7882292a17e741947b0df12d0f478, type: 3}
+    _north1: {fileID: 8300000, guid: d8c80e60f7c7e914193337d51b145d9a, type: 3}
+    counsel:
+      maintain:
+      - {fileID: 8300000, guid: 6655fc3b67df6e3469a5f6fee1acafc5, type: 3}
+      - {fileID: 8300000, guid: 7bbae14c6a31d26479be3cf22b9279e5, type: 3}
+      - {fileID: 8300000, guid: 665113622f31997478e70b7c38cecdf3, type: 3}
+      driftLeft:
+      - {fileID: 8300000, guid: 1b631a0085b25934cb19f5ffdef566b4, type: 3}
+      - {fileID: 8300000, guid: 7425d7b5485f5e745bab8abad7890cfc, type: 3}
+      driftRight:
+      - {fileID: 8300000, guid: 4b27d5ebd9036ba40863fb5125b21b75, type: 3}
+      - {fileID: 8300000, guid: d12c5c525537bd5438a822f1d7523683, type: 3}
+    arrival:
+      generic:
+      - {fileID: 8300000, guid: f0bce50ca3e69b4458d7090988c71389, type: 3}
+      - {fileID: 8300000, guid: 871325f2936d413489284a09c6805a0a, type: 3}
+      - {fileID: 8300000, guid: b9ffc33f9fa53f9409f2d68a82d5ca15, type: 3}
+      stationary: []
+      dynamic: []
+  geoMapper: {fileID: 660818620}
+  targetManager: {fileID: 1519239689}
+  sceneCamera: {fileID: 1003238716}
+  audioHeading: {fileID: 1960842817}
+  voiceSource: {fileID: 1493404343}
+  headingRadius: 1.5
+  cueFrequencySeconds: 7
+  playNoTargetCue: 0
+  initialAhead: {fileID: 8300000, guid: 01e54a6a80a25344e9d2fdd82099b00c, type: 3}
+  initialLeft: {fileID: 8300000, guid: 91817d8d06295d749939daff2bc50b38, type: 3}
+  initialRight: {fileID: 8300000, guid: 4b27d5ebd9036ba40863fb5125b21b75, type: 3}
+  initialBehind: {fileID: 8300000, guid: 759d777bf4108684d8083afe79c55e66, type: 3}
+  initialAheadDeg: 25
+  initialBehindDeg: 140
+  missionComplete: {fileID: 8300000, guid: a247947ed7183494c813d23ab32fd322, type: 3}
+  straightAheadDeg: 24
+  straightAheadCooldown: 3
+--- !u!4 &1788478695
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1788478693}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -167.49184, y: 2459.6997, z: -45.92752}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1869332111
 GameObject:
   m_ObjectHideFlags: 0
@@ -2264,6 +2601,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Sonus.Web::SonusLocationDriver
   geoMapper: {fileID: 660818620}
+  scene: {fileID: 1278132610}
   debugLogs: 0
 --- !u!4 &1869332113
 Transform:
@@ -2278,6 +2616,38 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1960842816
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1960842817}
+  m_Layer: 0
+  m_Name: Audio Clue
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1960842817
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1960842816}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1493404346}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2116198337
@@ -2359,3 +2729,5 @@ SceneRoots:
   - {fileID: 1519239688}
   - {fileID: 660818621}
   - {fileID: 1869332113}
+  - {fileID: 1788478695}
+  - {fileID: 1960842817}

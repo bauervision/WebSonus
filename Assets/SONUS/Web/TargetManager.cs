@@ -187,6 +187,8 @@ public class TargetManager : MonoBehaviour
             if (debugLogs)
                 Debug.Log($"[TargetHunt] FOUND (d={_lastDistanceMeters:F1}m) -> respawn");
 
+            AudioManager.Instance.PlayArrival(currentTarget);
+            AudioManager.Instance.StopSonic();
             RequestRespawn();
         }
     }
@@ -344,6 +346,12 @@ public class TargetManager : MonoBehaviour
             double approxGeo = TargetGeoUtil.ApproxMetersBetween(baseLat, baseLon, tLat, tLon);
             Debug.Log($"[TargetHunt] Spawned target #{_targetsSpawnedThisRun}/{targetsPerRun} geoDist≈{approxGeo:F0}m @ ({tLat:F6},{tLon:F6})");
         }
+
+        // NEW: sonic reset + initial callout + periodic loop
+        AudioManager.Instance.OnTargetChanged(currentTarget);
+        AudioManager.Instance.PlayInitialDirectionForTarget(currentTarget, true);
+        AudioManager.Instance.StartSonic();
+
 
         if (!_in2DMode)
         {
@@ -738,6 +746,8 @@ public class TargetManager : MonoBehaviour
             if (debugLogs)
                 Debug.Log("[TargetHunt] Run complete. Waiting for user to start another run.");
 
+            AudioManager.Instance.PlayMissionComplete();
+            AudioManager.Instance.StopSonic();
             OnRunComplete?.Invoke();
             _isRespawning = false;
             yield break;
