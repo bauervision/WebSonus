@@ -137,6 +137,7 @@ public class TargetManager : MonoBehaviour
 
     private void Update()
     {
+
         if (_isRespawning) return;
 
 
@@ -151,7 +152,7 @@ public class TargetManager : MonoBehaviour
             {
                 currentTarget._Lat = lat;
                 currentTarget._Lon = lon;
-
+                // Debug2DSnapshot("PatrolTick", lon, lat);
                 // Push into 3D marker if active AND ready (prevents OM NRE)
                 if (_marker3DReady && _marker3D != null && _marker3D.enabled)
                 {
@@ -175,6 +176,9 @@ public class TargetManager : MonoBehaviour
 
                 // Always keep 2D marker location current.
                 Update2DMarkerLocationSafe(lon, lat);
+                if (debugLogs && _in2DMode && (Time.frameCount % 30 == 0))
+                    Debug2DSnapshot("2DTick", lon, lat);
+
             }
         }
 
@@ -208,19 +212,30 @@ public class TargetManager : MonoBehaviour
     {
         _in2DMode = true;
 
-        // Auto-wire 2D marker manager if missing
-        if (markerManager2D == null && map2D != null)
-            markerManager2D = map2D.GetComponentInChildren<Marker2DManager>(true);
+        // Wire FIRST
+        if (markerManager2D == null && sceneController != null && sceneController.markerManager2D != null)
+            markerManager2D = sceneController.markerManager2D;
 
+        // 2) Force singleton deterministically on mode entry (prevents wrong-instance marker creation)
+        Ensure2DManagerSingleton();
+
+        Debug2DSnapshot("Enter2D");
+
+        // 3) Ensure we have a target before creating marker
         EnsureTarget(map2D);
 
-        // Never create 2D markers immediately on mode switch; OnlineMaps may not be initialized yet.
-        Kick2DMarkerCreateIf2DActive();
+        // Stop + start exactly one routine
+        if (_recreate2DRoutine != null) StopCoroutine(_recreate2DRoutine);
+        _recreate2DRoutine = StartCoroutine(Recreate2DMarkerWhenReady());
 
-        // Do NOT disable Marker3D via OM here (can NRE during teardown). Just hide GO safely.
+        // 5) Hide 3D marker visuals safely
         Set3DEnabled(false);
 
+        // 6) Redraw the 2D map (harmless even if not fully ready)
         map2D?.Redraw();
+
+        // Debug snapshot
+        Debug2DSnapshot("Enter2D");
 
         if (debugLogs && map2D != null && currentTarget != null)
         {
@@ -229,22 +244,29 @@ public class TargetManager : MonoBehaviour
         }
     }
 
+
     public void OnEnter3D()
     {
         _in2DMode = false;
 
         if (debugLogs) Debug.Log("[TargetHunt] Enter3D");
 
+        // Stop any pending 2D recreate routine so it doesn't fight you
+        if (_recreate2DRoutine != null)
+        {
+            StopCoroutine(_recreate2DRoutine);
+            _recreate2DRoutine = null;
+        }
+
         EnsureTarget(sceneController != null ? sceneController.map2D : null);
 
-        // Make sure the marker GO is allowed to render before we sync
+        // Allow 3D to render before we sync
         Set3DEnabled(true);
 
         if (_sync3DRoutine != null) StopCoroutine(_sync3DRoutine);
         _sync3DRoutine = StartCoroutine(Ensure3DMarkerAndSync());
-
-
     }
+
 
     // ---------------------------
     // Run control (called by UI)
@@ -524,19 +546,28 @@ public class TargetManager : MonoBehaviour
     private void Update2DMarkerLocationSafe(double lon, double lat)
     {
         if (_marker2D == null) return;
-        if (!Is2DReady()) return;
 
-        Ensure2DManagerSingleton();
-
+        // ✅ Always keep marker geo current. Do NOT gate on Is2DReady().
         _marker2D.location = new GeoPoint(lon, lat);
 
-        // Only redraw if user is looking at 2D (performance).
-        if (_in2DMode && markerManager2D != null && markerManager2D.map != null && Time.time >= _next2DRedrawTime)
+        // Only redraw if we’re actually viewing 2D and the map object exists/active.
+        if (!_in2DMode) return;
+        if (markerManager2D == null) return;
+
+        var map = markerManager2D.map;
+        if (map == null) return;
+        if (!map.gameObject.activeInHierarchy) return;
+
+        // Keep singleton consistent (but don’t require map.control enabled).
+        Ensure2DManagerSingleton();
+
+        if (Time.time >= _next2DRedrawTime)
         {
             _next2DRedrawTime = Time.time + (1f / Mathf.Max(1f, map2DRedrawHz));
-            markerManager2D.map.Redraw();
+            map.Redraw();
         }
     }
+
 
     private bool Is2DReady()
     {
@@ -547,11 +578,6 @@ public class TargetManager : MonoBehaviour
         if (map == null) return false;
         if (!map.gameObject.activeInHierarchy) return false;
 
-        var ctrl = map.control;
-        if (ctrl == null) return false;
-        if (!ctrl.enabled) return false;
-        if (!ctrl.gameObject.activeInHierarchy) return false;
-
         return true;
     }
 
@@ -559,35 +585,75 @@ public class TargetManager : MonoBehaviour
     {
         if (!_in2DMode) yield break;
 
+        // Let OnlineMaps settle after mode toggle
         yield return null;
         yield return new WaitForEndOfFrame();
         yield return null;
-        yield return new WaitForEndOfFrame();
 
-        float timeout = 3.0f;
+        // Ensure manager is wired
+        if (markerManager2D == null && sceneController != null && sceneController.markerManager2D != null)
+            markerManager2D = sceneController.markerManager2D;
+
+        const float timeout = 3.0f;
         float t0 = Time.realtimeSinceStartup;
 
-        while (_in2DMode && !Is2DReady() && (Time.realtimeSinceStartup - t0) < timeout)
+        // Wait until the map exists and is active (do NOT depend on control enabled)
+        while (_in2DMode &&
+               (markerManager2D == null ||
+                !markerManager2D.gameObject.activeInHierarchy ||
+                markerManager2D.map == null ||
+                !markerManager2D.map.gameObject.activeInHierarchy) &&
+               (Time.realtimeSinceStartup - t0) < timeout)
+        {
             yield return null;
+        }
 
         if (!_in2DMode) yield break;
 
-        if (!Is2DReady())
+        if (markerManager2D == null || markerManager2D.map == null)
         {
-            if (debugLogs) Debug.LogWarning("[TargetHunt] 2D not ready; skipping marker create.");
+            if (debugLogs) Debug.LogWarning("[TargetHunt] 2D map not available; skipping marker ensure.");
+            Debug2DSnapshot("Recreate2DNoMap");
             yield break;
         }
 
         if (targetMarkerTexture == null || currentTarget == null)
         {
-            if (debugLogs) Debug.LogWarning("[TargetHunt] Missing texture or target; cannot create 2D marker.");
+            if (debugLogs) Debug.LogWarning("[TargetHunt] Missing texture or target; cannot ensure 2D marker.");
+            Debug2DSnapshot("Recreate2DMissingDeps");
             yield break;
         }
 
+        // Force singleton BEFORE any marker calls
         Ensure2DManagerSingleton();
 
-        SafeRemove2DMarker();
+        // ✅ If we already have a marker, DO NOT delete/recreate it.
+        // Just ensure it’s enabled, bound, and redrawn.
+        if (_marker2D != null)
+        {
+            try
+            {
+                _marker2D.enabled = true;
+                _marker2D["data"] = currentTarget;
+                _marker2D.location = new GeoPoint(currentTarget._Lon, currentTarget._Lat);
 
+                markerManager2D.map.Redraw();
+                Debug2DSnapshot("Recreate2DReusedMarkerDone");
+
+                if (debugLogs)
+                    Debug.Log("[TargetHunt] 2D marker reused (no recreate).");
+
+                yield break;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[TargetHunt] 2D reuse exception: {ex.GetType().Name}: {ex.Message}");
+                Debug2DSnapshot("Recreate2DReuseException");
+                yield break;
+            }
+        }
+
+        // Otherwise create once (no SafeRemove here — there is nothing to remove)
         try
         {
             _marker2D = Marker2DManager.CreateItem(
@@ -600,6 +666,7 @@ public class TargetManager : MonoBehaviour
             if (_marker2D == null)
             {
                 Debug.LogWarning("[TargetHunt] 2D CreateItem returned null.");
+                Debug2DSnapshot("Recreate2DNullCreate");
                 yield break;
             }
 
@@ -608,7 +675,10 @@ public class TargetManager : MonoBehaviour
             _marker2D.enabled = true;
             _marker2D["data"] = currentTarget;
 
-            markerManager2D.map?.Redraw();
+            _marker2D.location = new GeoPoint(currentTarget._Lon, currentTarget._Lat);
+
+            markerManager2D.map.Redraw();
+            Debug2DSnapshot("Recreate2DMarkerDone");
 
             if (debugLogs)
                 Debug.Log($"[TargetHunt] 2D marker created @ ({currentTarget._Lat:F6},{currentTarget._Lon:F6})");
@@ -616,8 +686,11 @@ public class TargetManager : MonoBehaviour
         catch (System.Exception ex)
         {
             Debug.LogWarning($"[TargetHunt] 2D CreateItem exception: {ex.GetType().Name}: {ex.Message}");
+            Debug2DSnapshot("Recreate2DException");
+            // IMPORTANT: leave _marker2D as null; Update2DMarkerLocationSafe will safely no-op.
         }
     }
+
 
     private void SafeRemove2DMarker()
     {
@@ -635,6 +708,7 @@ public class TargetManager : MonoBehaviour
 
         _marker2D = null;
     }
+
 
     // ---------------------------
     // 3D marker
@@ -751,8 +825,10 @@ public class TargetManager : MonoBehaviour
 
         var t = typeof(Marker2DManager);
         var f = t.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-        f?.SetValue(null, markerManager2D);
+        if (f == null) return;
+        f.SetValue(null, markerManager2D);
     }
+
 
     // ---------------------------
     // Respawn
@@ -851,6 +927,30 @@ public class TargetManager : MonoBehaviour
         double m = TargetGeoUtil.ApproxMetersBetween(pLat, pLon, currentTarget._Lat, currentTarget._Lon);
         return (float)m;
     }
+
+    void Debug2DSnapshot(string tag, double lon = double.NaN, double lat = double.NaN)
+    {
+        if (!debugLogs) return;
+
+        var map = markerManager2D != null ? markerManager2D.map : null;
+        var ctrl = map != null ? map.control : null;
+
+        string m2d = _marker2D != null
+            ? $"m2d#{_marker2D.GetHashCode()} loc=({_marker2D.location.y:F6},{_marker2D.location.x:F6})"
+            : "m2d=null";
+
+        string mapStr = map != null
+            ? $"map#{map.GetHashCode()} active={map.gameObject.activeInHierarchy}"
+            : "map=null";
+
+        string ctrlStr = ctrl != null
+            ? $"ctrl#{ctrl.GetHashCode()} enabled={ctrl.enabled} active={ctrl.gameObject.activeInHierarchy}"
+            : "ctrl=null";
+
+        Debug.Log($"[TargetHunt][{tag}] in2D={_in2DMode} {m2d} {mapStr} {ctrlStr} " +
+                  $"set=({lat:F6},{lon:F6})");
+    }
+
 
     private static T FindAny<T>() where T : Object
     {

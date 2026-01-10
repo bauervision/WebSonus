@@ -64,7 +64,7 @@ public class TargetPatrolManager : MonoBehaviour
         lat = lon = 0;
         if (!_hasRoute) return false;
 
-        if (dwellSeconds > 0f && Time.time < _dwellUntil)
+        if (dwellSeconds > 0f && Time.unscaledTime < _dwellUntil)
         {
             var pHold = GetPoint(_seg, _t);
             lat = pHold.lat; lon = pHold.lon;
@@ -85,7 +85,7 @@ public class TargetPatrolManager : MonoBehaviour
         {
             _t = 0f;
             _seg = (_seg + 1) % 3;
-            if (dwellSeconds > 0f) _dwellUntil = Time.time + dwellSeconds;
+            if (dwellSeconds > 0f) _dwellUntil = Time.unscaledTime + dwellSeconds;
         }
 
         var p = GetPoint(_seg, _t);

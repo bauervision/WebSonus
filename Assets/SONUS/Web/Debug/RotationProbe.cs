@@ -122,7 +122,7 @@ public class RotationProbe : MonoBehaviour
             (includeMarkerRot && !float.IsNaN(markerRot) ? $" | marker[{markerIndex}].rot={markerRot:F1}" : "") +
             (headingSource != null ? $" | srcYaw={srcYaw:F1} dYaw={deltaYaw:F1}" : "");
 
-        Debug.Log(_lastLine);
+
     }
 
     static float Normalize360(float deg)

@@ -192,7 +192,7 @@ public class AudioManager : MonoBehaviour
         while (true)
         {
             yield return new WaitForSecondsRealtime(cueFrequencySeconds);
-            Debug.Log("[Audio] Periodic tick");
+            //Debug.Log("[Audio] Periodic tick");
             PlayPeriodicSmartCue();
         }
     }

@@ -171,6 +171,10 @@ public class SonusMapSceneController : MonoBehaviour
         {
             float yaw = playerRoot.eulerAngles.y;
             _lastPlayerYawDeg = Mathf.Repeat(yaw + 180f, 360f);
+            if (SonusPlayerGeoState.HasValue)
+            {
+                SonusLocationState.Set(SonusPlayerGeoState.Lat, SonusPlayerGeoState.Lng);
+            }
         }
 
 
