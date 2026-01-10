@@ -97,6 +97,12 @@ public class AudioManager : MonoBehaviour
     private float _lastStraightAheadTime = -999f;
     private bool _everLockedThisTarget = false;
 
+
+    private Coroutine _initialRoutine;
+    [SerializeField] private float initialDelaySeconds = 0.12f; // tiny, demo-safe
+
+
+
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -149,14 +155,52 @@ public class AudioManager : MonoBehaviour
         _everLockedThisTarget = false;
         _lastStraightAheadTime = Time.time - straightAheadCooldown;
 
-        // drift state reset
         _isDrifting = false;
         _lastDriftCueTime = Time.time - driftCueCooldown;
         _lastMaintainCueTime = Time.time - maintainCueCooldown;
 
+        if (_initialRoutine != null) StopCoroutine(_initialRoutine);
+        _initialRoutine = StartCoroutine(CoPlayInitialWhenReady());
+
         if (debugLogs)
             Debug.Log($"[Audio] OnTargetChanged -> {(newTarget != null ? $"{newTarget._Lat:F6},{newTarget._Lon:F6}" : "null")}");
     }
+
+
+    private IEnumerator CoPlayInitialWhenReady()
+    {
+        // Let TargetManager spawn/anchor settle and camera/player yaw settle.
+        yield return null;
+        yield return null;
+
+        if (initialDelaySeconds > 0f)
+            yield return new WaitForSecondsRealtime(initialDelaySeconds);
+
+        // Don’t fight existing VO
+        if (voiceSource != null && voiceSource.isPlaying) yield break;
+
+        var actor = targetManager != null ? targetManager.currentTarget : null;
+        if (actor == null) yield break;
+
+        // Require world truth for initial direction (this is your “reticle truth”)
+        // If it isn't ready, wait up to a short timeout.
+        const float timeout = 1.0f;
+        float t0 = Time.realtimeSinceStartup;
+
+        while (Time.realtimeSinceStartup - t0 < timeout)
+        {
+            if (TryGetPlayerAndTargetWorld(actor, out var playerW, out var targetW))
+                break;
+
+            yield return null;
+        }
+
+        // Now play initial (direction always; distance only if TargetManager distance is ready)
+        PlayInitialDirectionForTarget(actor, alsoSpeakDistance: true);
+
+        _initialRoutine = null;
+    }
+
 
     private IEnumerator DriftCueLoop()
     {
@@ -306,25 +350,15 @@ public class AudioManager : MonoBehaviour
         meters = float.NaN;
         if (actor == null) return false;
 
-        if (targetManager != null)
-        {
-            float d = targetManager.DistanceToTargetMeters();
-            if (float.IsFinite(d) && d < float.PositiveInfinity)
-            {
-                meters = d;
-                return true;
-            }
-        }
+        if (targetManager == null) return false;
 
-        // Fallback (if you ever call audio before TargetManager is ready)
-        if (TryGetPlayerGeo(out double pLat, out double pLon))
-        {
-            meters = (float)TargetGeoUtil.ApproxMetersBetween(pLat, pLon, actor._Lat, actor._Lon);
-            return float.IsFinite(meters);
-        }
+        float d = targetManager.DistanceToTargetMeters();
+        if (!float.IsFinite(d) || d <= 0f || d >= float.PositiveInfinity) return false;
 
-        return false;
+        meters = d;
+        return true;
     }
+
 
 
 

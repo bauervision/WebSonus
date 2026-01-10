@@ -24,6 +24,10 @@ public class ARTargetReticleController : MonoBehaviour
     public bool showDistanceLabel = true;
     public string foundText = "FOUND";
 
+    [Header("Debug/Display")]
+    [Tooltip("Hard override to hide/show the reticle regardless of arModeEnabled.")]
+    public bool forceVisible = true;
+
     private RectTransform _reticle;
     private TMP_Text _label;
 
@@ -35,6 +39,9 @@ public class ARTargetReticleController : MonoBehaviour
 
     void LateUpdate()
     {
+        // Hard override: if forceVisible is off, always hide (even if arModeEnabled is true)
+        if (!forceVisible) { Hide(); return; }
+
         if (!arModeEnabled) { Hide(); return; }
         if (targetManager == null || arCamera == null || canvas == null) { Hide(); return; }
         if (targetManager.currentTarget == null) { Hide(); return; }
@@ -44,7 +51,6 @@ public class ARTargetReticleController : MonoBehaviour
 
         // Use GEO for distance (meters)
         float d = targetManager.DistanceToTargetMeters();
-
 
 #if UNITY_EDITOR
         // World-space distance (should generally go down as you walk closer in 3D if anchors are correct)
@@ -56,9 +62,7 @@ public class ARTargetReticleController : MonoBehaviour
         }
 #endif
 
-
         if (!float.IsFinite(d)) { Hide(); return; }
-
         if (d > maxShowDistanceMeters) { Hide(); return; }
 
         // Must be visible on-screen
@@ -81,6 +85,13 @@ public class ARTargetReticleController : MonoBehaviour
             _label.text = FormatDistance(d);
         else if (_label != null)
             _label.text = "";
+    }
+
+    // Public API for hotkeys / demo toggles
+    public void SetVisible(bool on)
+    {
+        forceVisible = on;
+        if (!forceVisible) Hide();
     }
 
     // --------------------------

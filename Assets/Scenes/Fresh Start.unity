@@ -737,6 +737,105 @@ MonoBehaviour:
   lineDuration: 0.25
   lift: 0.5
   drawNorthEast: 1
+--- !u!1 &653320486
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 653320488}
+  - component: {fileID: 653320487}
+  - component: {fileID: 653320489}
+  - component: {fileID: 653320490}
+  m_Layer: 0
+  m_Name: Audio Guidance Viz
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &653320487
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 653320486}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ff93e6c164a4bf3409f3da3440ba90e2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::AudioGuidanceDebugViz
+  audioManager: {fileID: 1788478694}
+  targetManager: {fileID: 1519239689}
+  headingSourceOverride: {fileID: 1003238712}
+  onlyWhenIn3D: 1
+  startHeight: 0.2
+  drawDistance: 25
+  farConeDeg: 10
+  nearConeDeg: 24
+  farMeters: 120
+  nearMeters: 50
+  arrowLen: 8
+  arrowSideLen: 2.5
+--- !u!4 &653320488
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 653320486}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -2.00894, y: 0, z: -56.66838}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &653320489
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 653320486}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0d1482e81fd1b24438cc4878bd5f4447, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::AudioGuidanceLineVizLR
+  audioManager: {fileID: 1788478694}
+  targetManager: {fileID: 1519239689}
+  headingSourceOverride: {fileID: 1003238712}
+  onlyWhenIn3D: 1
+  startHeight: 0.25
+  drawDistance: 30
+  lineWidth: 0.04
+  farConeDeg: 10
+  nearConeDeg: 24
+  farMeters: 120
+  nearMeters: 50
+  arrowLen: 8
+  arrowSideLen: 2
+--- !u!114 &653320490
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 653320486}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 981b36a944777314eae9d91e8679496b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sonus.Web::DebugVizHotkeys
+  guidanceViz: {fileID: 653320489}
+  reticle: {fileID: 1519239690}
+  toggleKey: 273
+  startVisible: 0
 --- !u!1 &660818619
 GameObject:
   m_ObjectHideFlags: 0
@@ -1212,7 +1311,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 4459864851310106429, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1960842817}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 4459864851310106424, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       insertIndex: -1
@@ -1275,6 +1377,11 @@ MonoBehaviour:
 --- !u!20 &1003238716 stripped
 Camera:
   m_CorrespondingSourceObject: {fileID: 4459864851310106426, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
+  m_PrefabInstance: {fileID: 1003238711}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1003238718 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4459864851310106429, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
   m_PrefabInstance: {fileID: 1003238711}
   m_PrefabAsset: {fileID: 0}
 --- !u!1 &1091994358
@@ -2478,6 +2585,7 @@ MonoBehaviour:
   maxShowDistanceMeters: 2000
   showDistanceLabel: 1
   foundText: FOUND
+  forceVisible: 1
 --- !u!114 &1519239691
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2605,7 +2713,7 @@ MonoBehaviour:
       - {fileID: 8300000, guid: 1b631a0085b25934cb19f5ffdef566b4, type: 3}
       - {fileID: 8300000, guid: 7425d7b5485f5e745bab8abad7890cfc, type: 3}
       driftRight:
-      - {fileID: 8300000, guid: 4b27d5ebd9036ba40863fb5125b21b75, type: 3}
+      - {fileID: 8300000, guid: 1cc19faffd37a044ab8e3fcb2c7e0d45, type: 3}
       - {fileID: 8300000, guid: d12c5c525537bd5438a822f1d7523683, type: 3}
     arrival:
       generic:
@@ -2621,8 +2729,8 @@ MonoBehaviour:
   voiceSource: {fileID: 1493404343}
   headingRadius: 1.5
   headingSource: {fileID: 1003238712}
-  headingOffsetDeg: 180
-  invertLeftRight: 1
+  headingOffsetDeg: 0
+  invertLeftRight: 0
   cueFrequencySeconds: 7
   playNoTargetCue: 0
   initialAhead: {fileID: 8300000, guid: 01e54a6a80a25344e9d2fdd82099b00c, type: 3}
@@ -2631,12 +2739,20 @@ MonoBehaviour:
   initialBehind: {fileID: 8300000, guid: 759d777bf4108684d8083afe79c55e66, type: 3}
   initialAheadDeg: 25
   initialBehindDeg: 140
-  initialRetryWindowSeconds: 1.25
-  initialRetryIntervalSeconds: 0.08
   missionComplete: {fileID: 8300000, guid: a247947ed7183494c813d23ab32fd322, type: 3}
   straightAheadDeg: 24
   straightAheadCooldown: 3
+  driftTickSeconds: 0.35
+  driftNearDistanceM: 50
+  driftFarDistanceM: 250
+  driftConeFarDeg: 10
+  driftConeNearDeg: 35
+  driftReenterHysteresisDeg: 4
+  driftCueCooldown: 2.5
+  maintainCueCooldown: 2.5
+  driftDisableUnderMeters: 12
   debugLogs: 0
+  initialDelaySeconds: 0.12
 --- !u!4 &1788478695
 Transform:
   m_ObjectHideFlags: 0
@@ -2725,13 +2841,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1960842816}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1493404346}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1003238718}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2116198337
 GameObject:
@@ -2813,5 +2929,5 @@ SceneRoots:
   - {fileID: 660818621}
   - {fileID: 1869332113}
   - {fileID: 1788478695}
-  - {fileID: 1960842817}
   - {fileID: 1377719254}
+  - {fileID: 653320488}

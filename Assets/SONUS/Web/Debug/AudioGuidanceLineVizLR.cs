@@ -297,4 +297,20 @@ public class AudioGuidanceLineVizLR : MonoBehaviour
         if (_headingLine != null) _headingLine.enabled = false;
         ShowArrow(false);
     }
+
+    public void HideAllPublic() => HideAll();
+
+    public void SetVisible(bool on)
+    {
+        enabled = on;
+        if (!on) HideAll();
+    }
+
+
+    void OnDisable()
+    {
+        HideAll();
+    }
+
+
 }
