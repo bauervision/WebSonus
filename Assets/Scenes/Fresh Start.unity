@@ -1156,19 +1156,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -1176,7 +1176,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
+      value: 180
       objectReference: {fileID: 0}
     - target: {fileID: 4459864850019384738, guid: 6bacecc4f3df9584198879c73a6b6c36, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -2620,6 +2620,9 @@ MonoBehaviour:
   audioHeading: {fileID: 1960842817}
   voiceSource: {fileID: 1493404343}
   headingRadius: 1.5
+  headingSource: {fileID: 1003238712}
+  headingOffsetDeg: 180
+  invertLeftRight: 1
   cueFrequencySeconds: 7
   playNoTargetCue: 0
   initialAhead: {fileID: 8300000, guid: 01e54a6a80a25344e9d2fdd82099b00c, type: 3}
@@ -2628,9 +2631,12 @@ MonoBehaviour:
   initialBehind: {fileID: 8300000, guid: 759d777bf4108684d8083afe79c55e66, type: 3}
   initialAheadDeg: 25
   initialBehindDeg: 140
+  initialRetryWindowSeconds: 1.25
+  initialRetryIntervalSeconds: 0.08
   missionComplete: {fileID: 8300000, guid: a247947ed7183494c813d23ab32fd322, type: 3}
   straightAheadDeg: 24
   straightAheadCooldown: 3
+  debugLogs: 0
 --- !u!4 &1788478695
 Transform:
   m_ObjectHideFlags: 0
