@@ -44,8 +44,8 @@ public class SonusMapSceneController : MonoBehaviour
     [Header("3D Elevation Probe (player)")]
     public GameObject playerProbePrefab;     // tiny empty prefab (can be invisible)
     public float playerGroundOffset = 1.8f;  // how high above surface to place player
-    public int probeWarmupFrames = 10;       // frames to wait after Update()
-    public float probeTimeoutSeconds = 2.0f; // max wait for tileset resolve
+    public int probeWarmupFrames = 30;       // frames to wait after Update()
+    public float probeTimeoutSeconds = 8.0f; // max wait for tileset resolve
 
     private Marker3D _playerProbe3D;
 
